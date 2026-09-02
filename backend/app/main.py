@@ -5,6 +5,7 @@ Run locally with:
     ./.venv/bin/uvicorn app.main:app --reload --app-dir backend
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,13 +14,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api import router as api_router
 from .config import settings
 from .db import init_db
+from .scheduler import start_scheduler, stop_scheduler
+
+
+# Without this, our own log.info calls are swallowed and the hosting
+# provider's log stream only shows uvicorn's request lines -- which makes it
+# impossible to tell whether a scheduled refresh actually ran.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+# httpx logs every GitHub API call at INFO, which is far too noisy.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create tables on startup so a fresh clone just works."""
+    """Create tables and start the background refresh timer on startup."""
     init_db()
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(
