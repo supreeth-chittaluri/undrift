@@ -17,6 +17,7 @@ from .config import settings
 from .db import get_session, utcnow
 from .models import Commit, Profile, Repo, SkillScore, SyncRun
 from .pipeline import latest_run, run_refresh
+from .scoring import FADING_THRESHOLD, FRESH_THRESHOLD, days_until_freshness
 from .schemas import (
     CommitOut,
     ProfileOut,
@@ -120,12 +121,21 @@ def get_skills(
             )
         }
 
+    def forecast(raw_weight: float, target: float) -> Optional[float]:
+        """Days until this skill decays past `target`, rounded for display."""
+        days = days_until_freshness(raw_weight, target)
+        return round(days, 1) if days is not None else None
+
     out = [
         SkillOut(
             skill=row.skill,
             freshness=round(row.freshness, 2),
+            depth=round(row.depth, 2) if row.depth is not None else None,
+            momentum=round(row.momentum, 2) if row.momentum is not None else None,
             raw_weight=round(row.raw_weight, 4),
             commit_count=row.commit_count,
+            repo_count=row.repo_count,
+            first_commit_at=row.first_commit_at,
             last_commit_at=row.last_commit_at,
             days_since_last=round(row.days_since_last, 1),
             delta=(
@@ -133,6 +143,8 @@ def get_skills(
                 if row.skill in previous
                 else None
             ),
+            days_until_fading=forecast(row.raw_weight, FRESH_THRESHOLD),
+            days_until_stale=forecast(row.raw_weight, FADING_THRESHOLD),
         )
         for row in current
     ]
