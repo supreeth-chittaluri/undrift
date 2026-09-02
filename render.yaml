@@ -29,8 +29,19 @@ services:
         sync: false
 
       # The deployed dashboard's origin, so CORS lets it call this API.
+      # Set this to your Vercel URL after the frontend is deployed.
       - key: ALLOWED_ORIGINS
         sync: false
+
+      # Public GitHub usernames seeded as sample profiles, comma-separated.
+      - key: SAMPLE_PROFILES
+        sync: false
+
+      # Cost ceilings on a first sync: each new commit is one Claude call.
+      - key: MAX_REPOS
+        value: "6"
+      - key: MAX_COMMITS_PER_REPO
+        value: "20"
 
       # The free plan sleeps after ~15 minutes idle, so an in-process timer
       # cannot be relied on. The GitHub Actions cron drives refreshes instead.
