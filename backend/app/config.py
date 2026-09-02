@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     # --- Auth ------------------------------------------------------------
     app_username: str = ""
     app_password: str = ""
+    # Serve sample profiles over GET without credentials, so the deployed link
+    # opens on a working dashboard instead of a login wall. Only profiles
+    # flagged is_sample are ever exposed this way; the owner's own history
+    # still needs the password above. Set false to make the whole API private.
+    public_demo: bool = True
 
 
     # --- Frontend / CORS --------------------------------------------------
