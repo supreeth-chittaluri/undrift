@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- On Vercel's free plan the production URL is publicly reachable, so
+         keep it out of search results. The real access gate is the API's
+         Basic auth -- this just stops the page being *found*. -->
+    <meta name="robots" content="noindex, nofollow" />
     <title>Undrift</title>
   </head>
   <body>
