@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import router as api_router
+from .auth import BasicAuthMiddleware
 from .config import settings
 from .db import init_db
 from .scheduler import start_scheduler, stop_scheduler
@@ -43,6 +44,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Order matters. Starlette runs the most recently added middleware first, so
+# CORS is added last and ends up outermost -- it must answer the browser's
+# preflight OPTIONS request before auth gets a chance to reject it.
+app.add_middleware(BasicAuthMiddleware)
 
 # The dashboard is served from a different origin (Vercel) than the API
 # (Render), so the browser needs explicit permission to call it.
