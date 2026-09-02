@@ -61,6 +61,18 @@ export const getSkills = (profile) => request(withProfile("/api/skills", profile
 export const getHistory = (profile, weeks = 26) =>
   request(withProfile(`/api/skills/history?weeks=${weeks}`, profile));
 export const getStatus = () => request("/api/status");
-export const getCommits = (limit = 20) => request(`/api/commits?limit=${limit}`);
+
+// The one endpoint that still 401s for everyone. Every other read is public,
+// so this is what the login form checks a password against -- and it hands
+// back the owner's username so the dashboard needn't hardcode it.
+export const getSession = () => request("/api/session");
+
+// The evidence behind one skill: which commits were tagged with it and why.
+export const getCommits = (profile, skill, limit = 8) => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (profile) params.set("profile", profile);
+  if (skill) params.set("skill", skill);
+  return request(`/api/commits?${params}`);
+};
 export const triggerRefresh = () =>
   request("/api/refresh?trigger=manual", { method: "POST" });

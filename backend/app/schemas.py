@@ -74,6 +74,15 @@ class SyncRunOut(BaseModel):
     error: Optional[str]
 
 
+class SessionOut(BaseModel):
+    """Who the caller is. Returned only to authenticated callers."""
+
+    authenticated: bool
+    # The owner profile's GitHub username, so the dashboard doesn't have to
+    # hardcode whose data it is showing.
+    owner: Optional[str]
+
+
 class StatusOut(BaseModel):
     total_profiles: int
     total_repos: int
