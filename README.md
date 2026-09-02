@@ -13,6 +13,19 @@ work is never presented as yours.
 
 **[ARCHITECTURE.md](ARCHITECTURE.md) explains the data flow in five steps.**
 
+## Live
+
+| | |
+|---|---|
+| Dashboard | `https://undrift-supreeth-chittaluri.vercel.app` (Vercel, gated to my account) |
+| API | `https://undrift-api.onrender.com` (Render, Ohio) |
+| Database | Neon Postgres, `us-east-2`, pooled endpoint |
+| Refresh | GitHub Actions cron, 06:00 and 18:00 UTC |
+
+Use the production alias above, not a `undrift-<hash>.vercel.app` deployment
+URL — `ALLOWED_ORIGINS` lists only the stable alias, and every deploy creates
+a new immutable one that CORS would reject.
+
 ```
 FastAPI + SQLAlchemy + Postgres  ·  Claude API  ·  React + Vite + Chart.js
 APScheduler + GitHub Actions cron  ·  Render + Vercel
