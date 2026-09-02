@@ -41,6 +41,12 @@ services:
       - key: SAMPLE_PROFILES
         sync: false
 
+      # Sample profiles are readable without credentials so the deployed link
+      # is not a login wall. The owner's own profile stays behind Basic auth
+      # either way. Set false to close the API completely.
+      - key: PUBLIC_DEMO
+        value: "true"
+
       # Cost ceilings on a first sync. The first two bound how much history
       # gets pulled in; the third bounds what any single refresh can spend on
       # classification, whatever else goes wrong.
