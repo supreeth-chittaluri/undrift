@@ -232,25 +232,38 @@ that only touches genuinely new commits.
 
 ### What "private" actually means here
 
-Be precise about this, because the plan limits matter:
+Verified against the live deployment, not just read off the docs:
+
+| URL | Unauthenticated result |
+|---|---|
+| `undrift-<hash>-<team>.vercel.app` (immutable deployment) | `302` → Vercel SSO |
+| `undrift-<team>.vercel.app` (production alias) | `302` → Vercel SSO |
+
+So on the Hobby plan, with **no custom domain attached**, every URL this
+project has is gated behind Vercel Authentication — only your own Vercel
+account gets through. Vercel's docs describe Standard Protection as leaving
+"production domains" public, and that is true, but it means *custom* domains
+you attach yourself. The auto-generated `.vercel.app` production alias counts
+as a generated deployment URL and is protected.
+
+The practical consequence: **don't add a custom domain** unless you upgrade to
+Pro. Attaching one is exactly the step that would make the dashboard publicly
+reachable.
+
+Defence in depth is still worth having, because Vercel protection only guards
+the static page:
 
 | Layer | Protection | Cost |
 |---|---|---|
+| Vercel (all generated URLs) | Vercel Authentication — your account only | free |
 | Render API | HTTP Basic on every route except `/health` | free |
-| Vercel preview + deployment URLs | Vercel Authentication (your account only) | free |
-| Vercel **production** URL | **none** — publicly reachable | Pro ($20/mo) to protect |
+| Search engines | `noindex` meta + `robots.txt` disallow | free |
 
-On Vercel's Hobby plan, Standard Protection deliberately leaves the
-production domain public; only Pro can protect it. So `undrift.vercel.app`
-can be opened by anyone who has the link — but all they see is a login form,
-because every piece of data comes from the Render API and that rejects
-unauthenticated requests. The dashboard also ships `noindex` and a
-`robots.txt` disallow, so it should not turn up in search results.
+Even if the page were reachable, it renders only a login form — every byte of
+data comes from the Render API, which rejects unauthenticated requests.
 
-If you want the production URL genuinely gated too, the options are: upgrade
-to Pro, or record your demo from a **deployment URL** (the immutable
-`undrift-<hash>.vercel.app` one), which Standard Protection does cover on the
-free plan.
+For the demo video, sign in to Vercel in your browser first, then open the
+production alias; you will pass straight through.
 
 ## Security notes
 
