@@ -60,6 +60,13 @@ export default function Login({ onSuccess }) {
         <button type="submit" disabled={checking}>
           {checking ? "Checking…" : "Sign in"}
         </button>
+
+        {checking && (
+          <p className="hint">
+            If the API has been idle it may be waking up — this can take up to
+            a minute on the free tier.
+          </p>
+        )}
       </form>
     </div>
   );
