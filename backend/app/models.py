@@ -123,7 +123,17 @@ class SkillScore(Base):
     # math is inspectable and the normalisation isn't a black box.
     raw_weight: Mapped[float] = mapped_column(Float)
 
+    # The other two axes. Nullable because snapshots written before these
+    # existed genuinely don't have them -- an old row saying depth=0 would be
+    # a claim about the person, not a gap in the record.
+    depth: Mapped[Optional[float]] = mapped_column(Float)
+    momentum: Mapped[Optional[float]] = mapped_column(Float)
+
     commit_count: Mapped[int] = mapped_column(Integer, default=0)
+    # How many distinct repos the skill shows up in -- evidence spread, which
+    # separates "used it across my whole portfolio" from "one weekend project".
+    repo_count: Mapped[Optional[int]] = mapped_column(Integer)
+    first_commit_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_commit_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     days_since_last: Mapped[float] = mapped_column(Float, default=0.0)
     computed_at: Mapped[datetime] = mapped_column(DateTime, index=True, default=utcnow)

@@ -17,14 +17,24 @@ class ProfileOut(BaseModel):
 
 class SkillOut(BaseModel):
     skill: str
+    # The three axes. Freshness decays, depth doesn't, momentum is signed.
+    # See scoring.py for why one number wasn't enough.
     freshness: float
+    depth: Optional[float]
+    momentum: Optional[float]
     raw_weight: float
     commit_count: int
+    repo_count: Optional[int]
+    first_commit_at: Optional[datetime]
     last_commit_at: Optional[datetime]
     days_since_last: float
     # Change in freshness since the previous snapshot -- the "trending toward
     # or away from staleness" signal. None when there's no earlier snapshot.
     delta: Optional[float] = None
+    # Days until this skill decays past the "fading" and "stale" thresholds if
+    # no new commits arrive. None means it is already past that line.
+    days_until_fading: Optional[float] = None
+    days_until_stale: Optional[float] = None
 
 
 class HistoryPoint(BaseModel):
