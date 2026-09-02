@@ -1,12 +1,17 @@
 """
 Database models.
 
-Four tables, and the whole app is explainable from them:
+Five tables, and the whole app is explainable from them:
 
+  profiles     -- the GitHub users we track; every score belongs to one
   repos        -- the GitHub repositories we pull from
   commits      -- one row per commit, plus the skill tag the LLM assigned it
-  skill_scores -- a snapshot of every skill's freshness at one point in time
+  skill_scores -- a snapshot of one profile's skill freshness at a point in time
   sync_runs    -- a log of each automated refresh, so we can prove it's running
+
+Undrift tracks several people at once rather than being hardwired to one
+account. A "profile" is just a GitHub username; commits and scores hang off
+it, so two people's decay curves never mix.
 
 skill_scores is deliberately append-only rather than a single updated row:
 keeping every snapshot is what lets the dashboard draw a trend line showing a
@@ -22,6 +27,29 @@ from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, Uniqu
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base, utcnow
+
+
+class Profile(Base):
+    """
+    One person whose skills we track, identified by their GitHub username.
+
+    `is_sample` marks the public accounts seeded purely as demo data, so the
+    dashboard can label them honestly rather than implying their work is mine.
+    """
+
+    __tablename__ = "profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String(120))
+    is_sample: Mapped[bool] = mapped_column(default=False)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    commits: Mapped[List["Commit"]] = relationship(back_populates="profile")
+
+    def __repr__(self) -> str:
+        return f"<Profile {self.username}>"
 
 
 class Repo(Base):
@@ -45,6 +73,9 @@ class Commit(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     repo_id: Mapped[int] = mapped_column(ForeignKey("repos.id"), index=True)
+    # Who wrote it. Two people committing to the same repo produce two rows
+    # against two profiles, so their skill curves stay separate.
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), index=True)
     sha: Mapped[str] = mapped_column(String(40), unique=True, index=True)
 
     message: Mapped[str] = mapped_column(Text, default="")
@@ -65,6 +96,7 @@ class Commit(Base):
     tagged_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     repo: Mapped["Repo"] = relationship(back_populates="commits")
+    profile: Mapped["Profile"] = relationship(back_populates="commits")
 
     def __repr__(self) -> str:
         return f"<Commit {self.sha[:7]} skill={self.skill}>"
@@ -72,10 +104,13 @@ class Commit(Base):
 
 class SkillScore(Base):
     __tablename__ = "skill_scores"
-    # One row per skill per scoring run.
-    __table_args__ = (UniqueConstraint("skill", "computed_at", name="uq_skill_run"),)
+    # One row per profile per skill per scoring run.
+    __table_args__ = (
+        UniqueConstraint("profile_id", "skill", "computed_at", name="uq_profile_skill_run"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), index=True)
     skill: Mapped[str] = mapped_column(String(64), index=True)
 
     # 0-100, the number the dashboard bars actually render.

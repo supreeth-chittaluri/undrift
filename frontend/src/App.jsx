@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { AuthError, getHistory, getSkills, getStatus, triggerRefresh } from "./api";
+import {
+  AuthError,
+  getHistory,
+  getProfiles,
+  getSkills,
+  getStatus,
+  triggerRefresh,
+} from "./api";
 import { clearCredentials, getCredentials } from "./auth";
 import Login from "./components/Login";
+import ProfileSwitcher from "./components/ProfileSwitcher";
 import SkillBars from "./components/SkillBars";
 import StatusBar from "./components/StatusBar";
 import TrendChart from "./components/TrendChart";
@@ -11,6 +19,10 @@ export default function App() {
   // is made, so this starts as "we have something to try" and the first
   // failing load flips it back to false.
   const [authed, setAuthed] = useState(() => Boolean(getCredentials()));
+  const [profiles, setProfiles] = useState([]);
+  // null means "whichever profile the API considers the default" -- we don't
+  // hardcode the owner's username in the frontend.
+  const [selected, setSelected] = useState(null);
   const [skills, setSkills] = useState([]);
   const [history, setHistory] = useState([]);
   const [status, setStatus] = useState(null);
@@ -21,7 +33,18 @@ export default function App() {
   // One loader for all three endpoints, reused on mount and after a refresh.
   const load = useCallback(async () => {
     try {
-      const [s, h, st] = await Promise.all([getSkills(), getHistory(), getStatus()]);
+      const [p, s, h, st] = await Promise.all([
+        getProfiles(),
+        getSkills(selected),
+        getHistory(selected),
+        getStatus(),
+      ]);
+      setProfiles(p);
+      // On first load the API picked the default profile for us; record which
+      // one that was so the switcher can highlight it.
+      if (selected === null && p.length) {
+        setSelected(p.find((x) => !x.is_sample)?.username ?? p[0].username);
+      }
       setSkills(s);
       setHistory(h);
       setStatus(st);
@@ -35,7 +58,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selected]);
 
   useEffect(() => {
     if (authed) {
@@ -68,6 +91,8 @@ export default function App() {
     return <Login onSuccess={() => setAuthed(true)} />;
   }
 
+  const activeProfile = profiles.find((p) => p.username === selected);
+
   return (
     <div className="app">
       <header>
@@ -80,6 +105,12 @@ export default function App() {
         </p>
       </header>
 
+      <ProfileSwitcher
+        profiles={profiles}
+        selected={selected}
+        onSelect={setSelected}
+      />
+
       <StatusBar status={status} onRefresh={handleRefresh} refreshing={refreshing} />
 
       {error && <p className="error">Could not reach the API: {error}</p>}
@@ -88,7 +119,14 @@ export default function App() {
       ) : (
         <>
           <section>
-            <h2>Freshness now</h2>
+            <h2>
+              Freshness now
+              {activeProfile?.is_sample && (
+                <span className="section-note">
+                  public sample data from @{activeProfile.username}
+                </span>
+              )}
+            </h2>
             <SkillBars skills={skills} />
           </section>
 

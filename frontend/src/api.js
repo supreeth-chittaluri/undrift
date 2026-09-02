@@ -34,8 +34,15 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export const getSkills = () => request("/api/skills");
-export const getHistory = (weeks = 26) => request(`/api/skills/history?weeks=${weeks}`);
+// `profile` is a GitHub username. Omitting it makes the API fall back to the
+// owner profile, which is what the dashboard shows on first load.
+const withProfile = (path, profile) =>
+  profile ? `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(profile)}` : path;
+
+export const getProfiles = () => request("/api/profiles");
+export const getSkills = (profile) => request(withProfile("/api/skills", profile));
+export const getHistory = (profile, weeks = 26) =>
+  request(withProfile(`/api/skills/history?weeks=${weeks}`, profile));
 export const getStatus = () => request("/api/status");
 export const getCommits = (limit = 20) => request(`/api/commits?limit=${limit}`);
 export const triggerRefresh = () =>

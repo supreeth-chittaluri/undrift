@@ -2,6 +2,11 @@
 // decayed skill literally looks faded next to a fresh one -- the whole point
 // of the dashboard is visible before you read a single number.
 
+// Band on the same rounded number the label shows. Comparing the raw value
+// against the threshold made 24.98 render as "25.0" in stale red right next
+// to a genuine 25.3 in fading amber, which just looks broken.
+const shown = (freshness) => Number(freshness.toFixed(1));
+
 function band(freshness) {
   if (freshness >= 60) return "fresh";
   if (freshness >= 25) return "fading";
@@ -27,7 +32,7 @@ export default function SkillBars({ skills }) {
   return (
     <ul className="skill-list">
       {skills.map((s) => (
-        <li key={s.skill} className={`skill ${band(s.freshness)}`}>
+        <li key={s.skill} className={`skill ${band(shown(s.freshness))}`}>
           <div className="skill-head">
             <span className="skill-name">{s.skill}</span>
             <span className="skill-score">{s.freshness.toFixed(1)}</span>

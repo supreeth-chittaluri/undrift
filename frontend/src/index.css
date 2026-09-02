@@ -107,3 +107,27 @@ button.ghost:hover:not(:disabled) { background: var(--panel); color: var(--text)
 .login input:focus { outline: none; border-color: #2563eb; }
 .login button { margin-top: 0.35rem; padding: 0.6rem; }
 .login .error { margin: 0 0 0.9rem; }
+
+/* --- profile switcher --- */
+.profiles { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.9rem; }
+.profile-pill {
+  background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 0.4rem 0.85rem; font-size: 0.82rem;
+  display: inline-flex; align-items: center; gap: 0.45rem;
+}
+.profile-pill:hover:not(.active) { border-color: #33456b; color: var(--text); }
+.profile-pill.active { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.profile-name { font-weight: 600; }
+.profile-count {
+  font-variant-numeric: tabular-nums; font-size: 0.72rem;
+  background: rgba(255,255,255,0.12); border-radius: 999px; padding: 0.05rem 0.4rem;
+}
+.sample-badge {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em;
+  border: 1px solid currentColor; border-radius: 4px; padding: 0.02rem 0.28rem;
+  opacity: 0.75;
+}
+.section-note {
+  text-transform: none; letter-spacing: 0; font-weight: 400;
+  color: var(--muted); margin-left: 0.6rem; font-size: 0.78rem;
+}

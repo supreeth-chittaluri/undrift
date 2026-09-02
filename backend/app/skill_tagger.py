@@ -20,7 +20,8 @@ usable data instead of stalling.
 """
 
 import logging
-from typing import List, Literal, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Literal, NamedTuple, Optional
 
 import anthropic
 from pydantic import BaseModel, Field, ValidationError
@@ -88,7 +89,24 @@ touching a SQL model is "FastAPI", not "SQL/Databases", because the route is \
 the point of the change. Use "Other" only when nothing else plausibly fits."""
 
 
-def _build_prompt(commit: Commit) -> str:
+class PendingCommit(NamedTuple):
+    """
+    A commit's data, detached from the ORM.
+
+    Classification runs on a thread pool, and SQLAlchemy sessions are not
+    thread-safe -- so we copy out the plain fields first and only touch the
+    session again on the main thread when writing results back.
+    """
+
+    id: int
+    sha: str
+    message: str
+    files_changed: str
+    additions: int
+    deletions: int
+
+
+def _build_prompt(commit: PendingCommit) -> str:
     files = commit.files_changed or "(file list unavailable)"
     message = (commit.message or "").strip() or "(no message)"
     return (
@@ -125,14 +143,14 @@ _EXTENSION_SKILLS = [
 ]
 
 
-def fallback_tag(commit: Commit) -> CommitTag:
+def fallback_tag(files_changed: str) -> CommitTag:
     """
     Classify from file extensions alone, no network call.
 
     Used when ANTHROPIC_API_KEY is unset or the API call fails, so a missing
     key degrades the quality of the tags rather than breaking the pipeline.
     """
-    paths = (commit.files_changed or "").lower()
+    paths = (files_changed or "").lower()
     for needle, skill in _EXTENSION_SKILLS:
         if needle in paths:
             return CommitTag(
@@ -144,7 +162,9 @@ def fallback_tag(commit: Commit) -> CommitTag:
 # --- LLM tagging ------------------------------------------------------------
 
 
-def tag_commit(client: anthropic.Anthropic, commit: Commit) -> tuple[CommitTag, str]:
+def tag_commit(
+    client: anthropic.Anthropic, commit: PendingCommit
+) -> tuple[CommitTag, str]:
     """
     Classify one commit. Returns (tag, source) where source is "llm" or "fallback".
 
@@ -159,13 +179,18 @@ def tag_commit(client: anthropic.Anthropic, commit: Commit) -> tuple[CommitTag, 
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": _build_prompt(commit)}],
             output_format=CommitTag,
+            # Naming the dominant skill from a filename list is a simple
+            # classification, not a reasoning problem. Low effort gives the
+            # same answers with noticeably fewer tokens and lower latency,
+            # which matters when a sync run classifies hundreds of commits.
+            output_config={"effort": "low"},
         )
 
         # Safety classifiers can decline a request; that arrives as a normal
         # 200 response with stop_reason "refusal", not an exception.
         if response.stop_reason == "refusal":
             log.warning("Claude refused to classify %s; using fallback", commit.sha[:7])
-            return fallback_tag(commit), "fallback"
+            return fallback_tag(commit.files_changed), "fallback"
 
         tag = response.parsed_output
         if tag is None:
@@ -180,40 +205,65 @@ def tag_commit(client: anthropic.Anthropic, commit: Commit) -> tuple[CommitTag, 
 
     except (anthropic.APIError, ValidationError, ValueError) as exc:
         log.warning("Tagging %s failed (%s); using fallback", commit.sha[:7], exc)
-        return fallback_tag(commit), "fallback"
+        return fallback_tag(commit.files_changed), "fallback"
 
 
-def tag_untagged_commits(session: Session, limit: Optional[int] = None) -> int:
+def tag_untagged_commits(
+    session: Session, limit: Optional[int] = None, max_workers: int = 8
+) -> int:
     """
     Tag every commit that doesn't have a skill yet. Returns how many were tagged.
 
     Only untagged rows are processed, so re-running after an ingestion pass
     costs one API call per genuinely new commit and nothing for the rest.
+
+    Classification runs on a small thread pool. Each commit is still its own
+    independent API call -- that part stays simple -- but a first sync of a
+    prolific account can involve hundreds of them, and doing those one at a
+    time would take twenty minutes of mostly waiting on the network.
     """
     query = select(Commit).where(Commit.skill.is_(None)).order_by(Commit.authored_at.desc())
     if limit:
         query = query.limit(limit)
-    pending: List[Commit] = list(session.scalars(query))
+    rows: List[Commit] = list(session.scalars(query))
 
-    if not pending:
+    if not rows:
         return 0
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key) if settings.anthropic_api_key else None
-    if client is None:
+    # Detach the data before any threads start.
+    pending = [
+        PendingCommit(
+            id=c.id,
+            sha=c.sha,
+            message=c.message or "",
+            files_changed=c.files_changed or "",
+            additions=c.additions,
+            deletions=c.deletions,
+        )
+        for c in rows
+    ]
+
+    if not settings.anthropic_api_key:
         log.warning("ANTHROPIC_API_KEY not set -- tagging with the fallback classifier.")
+        results = [(p.id, fallback_tag(p.files_changed), "fallback") for p in pending]
+    else:
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    tagged = 0
-    for commit in pending:
-        if client is not None:
-            tag, source = tag_commit(client, commit)
-        else:
-            tag, source = fallback_tag(commit), "fallback"
+        def classify(item: PendingCommit):
+            tag, source = tag_commit(client, item)
+            return item.id, tag, source
 
+        log.info("Classifying %d commits (%d at a time)", len(pending), max_workers)
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            results = list(pool.map(classify, pending))
+
+    by_id = {c.id: c for c in rows}
+    for commit_id, tag, source in results:
+        commit = by_id[commit_id]
         commit.skill = tag.skill
         commit.skill_confidence = tag.confidence
         commit.tag_source = source
         commit.tagged_at = utcnow()
-        tagged += 1
 
     session.commit()
-    return tagged
+    return len(results)

@@ -65,7 +65,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import utcnow
-from .models import Commit, SkillScore
+from .models import Commit, Profile, SkillScore
 
 log = logging.getLogger(__name__)
 
@@ -103,21 +103,30 @@ def freshness_from_weight(raw_weight: float) -> float:
     return 100.0 * raw_weight / (raw_weight + HALF_SATURATION)
 
 
-def compute_scores(session: Session, as_of: Optional[datetime] = None) -> List[SkillScore]:
+def compute_scores(
+    session: Session, profile_id: int, as_of: Optional[datetime] = None
+) -> List[SkillScore]:
     """
-    Score every skill as it stood at `as_of` (default: right now).
+    Score one profile's skills as they stood at `as_of` (default: right now).
 
-    The `as_of` parameter is what makes the trend line possible -- we can
-    replay the same formula at past dates using the commits that existed then,
-    and see how a skill's freshness moved.
+    Scoring is always scoped to a single profile -- two people's commits must
+    never be summed into one curve.
+
+    The `as_of` parameter is what makes the trend line possible: we can replay
+    the same formula at past dates using the commits that existed then, and
+    see how a skill's freshness moved.
 
     Returns unsaved SkillScore objects; the caller decides whether to persist.
     """
     now = as_of or utcnow()
 
-    # Only commits that have been tagged and that existed at `as_of`.
+    # Only this profile's commits, tagged, and existing at `as_of`.
     commits = session.scalars(
-        select(Commit).where(Commit.skill.is_not(None), Commit.authored_at <= now)
+        select(Commit).where(
+            Commit.profile_id == profile_id,
+            Commit.skill.is_not(None),
+            Commit.authored_at <= now,
+        )
     ).all()
 
     # Accumulate per skill in one pass.
@@ -139,6 +148,7 @@ def compute_scores(session: Session, as_of: Optional[datetime] = None) -> List[S
         last = last_seen[skill]
         scores.append(
             SkillScore(
+                profile_id=profile_id,
                 skill=skill,
                 raw_weight=raw,
                 freshness=freshness_from_weight(raw),
@@ -154,12 +164,18 @@ def compute_scores(session: Session, as_of: Optional[datetime] = None) -> List[S
 
 
 def score_and_store(session: Session, as_of: Optional[datetime] = None) -> int:
-    """Compute one snapshot and save it. Returns how many skills were scored."""
-    scores = compute_scores(session, as_of=as_of)
-    for score in scores:
-        session.add(score)
+    """
+    Compute one snapshot per profile and save them all.
+
+    Returns the total number of skill rows written across every profile.
+    """
+    total = 0
+    for profile_id in session.scalars(select(Profile.id)).all():
+        for score in compute_scores(session, profile_id, as_of=as_of):
+            session.add(score)
+            total += 1
     session.commit()
-    return len(scores)
+    return total
 
 
 def backfill_history(session: Session, weeks: int = 26, step_days: int = 7) -> int:
@@ -179,16 +195,26 @@ def backfill_history(session: Session, weeks: int = 26, step_days: int = 7) -> i
     # would ever match an existing row and each run would silently append a
     # whole duplicate history. Snapping to midnight makes the dates stable.
     anchor = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    existing = set(session.scalars(select(SkillScore.computed_at)).all())
+    profile_ids = session.scalars(select(Profile.id)).all()
 
     written = 0
-    for week in range(weeks, 0, -1):
-        as_of = anchor - timedelta(days=week * step_days)
-        if as_of in existing:
-            continue
-        for score in compute_scores(session, as_of=as_of):
-            session.add(score)
-            written += 1
+    for profile_id in profile_ids:
+        # Dedupe per profile -- a profile added later still gets its own
+        # history backfilled even though other profiles already have theirs.
+        existing = set(
+            session.scalars(
+                select(SkillScore.computed_at).where(
+                    SkillScore.profile_id == profile_id
+                )
+            ).all()
+        )
+        for week in range(weeks, 0, -1):
+            as_of = anchor - timedelta(days=week * step_days)
+            if as_of in existing:
+                continue
+            for score in compute_scores(session, profile_id, as_of=as_of):
+                session.add(score)
+                written += 1
 
     session.commit()
     log.info("Backfilled %d historical score rows", written)
