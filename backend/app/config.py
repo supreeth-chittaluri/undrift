@@ -49,7 +49,21 @@ class Settings(BaseSettings):
 
     # --- LLM skill tagging ----------------------------------------------
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-opus-5"
+    # Classification is the easy end of what an LLM does: pick one label from
+    # a fixed list given a filename list. Haiku answers it as well as Opus for
+    # a fraction of the price, and price is the whole ballgame once strangers
+    # can trigger a sync from the public site.
+    anthropic_model: str = "claude-haiku-4-5"
+    # How many commits go into a single classification call. One call per
+    # commit spends most of its tokens re-sending the same system prompt; at
+    # 25 per call that overhead is amortised ~25x. Raising this further starts
+    # to hurt accuracy, because the model has to hold more context per answer.
+    tagger_batch_size: int = 25
+    # Hard ceiling on commits classified in one refresh. This is the spend
+    # stop: whatever else goes wrong -- a runaway backfill, someone pointing
+    # us at a 10,000-commit account -- a single run cannot cost more than this
+    # many commits' worth of tokens. Leftovers get tagged on the next run.
+    max_commits_per_tag_run: int = 600
 
     # --- Auth ------------------------------------------------------------
     app_username: str = ""

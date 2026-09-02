@@ -6,6 +6,7 @@ injects into route handlers. Works against SQLite locally and Postgres in
 production purely by swapping DATABASE_URL.
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Generator
 
@@ -13,6 +14,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import settings
+
+log = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -41,11 +44,49 @@ def get_session() -> Generator[Session, None, None]:
         session.close()
 
 
+def _add_missing_columns() -> None:
+    """
+    Add columns that exist on the models but not yet in the database.
+
+    `create_all()` creates missing *tables* and silently ignores tables that
+    already exist -- including ones missing a column added since they were
+    created. Without this, deploying a new nullable column would leave
+    production querying a column that isn't there.
+
+    This is deliberately not a migration system. It only ever ADDs nullable
+    columns; it will not drop, rename, or retype anything, and it makes no
+    attempt to order changes or roll them back. That covers the only schema
+    change this project actually makes -- the database is a rebuildable cache
+    of GitHub, so anything more complicated is still answered by dropping it
+    and re-ingesting. If that ever stops being true, the answer is Alembic,
+    not more code here.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue  # create_all() just made it, with every column
+        present = {c["name"] for c in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in present or not column.nullable:
+                continue
+            ddl_type = column.type.compile(engine.dialect)
+            with engine.begin() as conn:
+                conn.execute(
+                    text(f'ALTER TABLE {table.name} ADD COLUMN {column.name} {ddl_type}')
+                )
+            log.info("Added missing column %s.%s", table.name, column.name)
+
+
 def init_db() -> None:
-    """Create any tables that don't exist yet."""
+    """Create any tables that don't exist yet, then patch in new columns."""
     from . import models  # noqa: F401  (import registers the models on Base)
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
 
 
 def utcnow() -> datetime:

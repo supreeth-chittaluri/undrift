@@ -222,9 +222,9 @@ migration step to point at a direct connection.
 3. Wait for the first deploy, then confirm it's alive:
    `curl https://<your-service>.onrender.com/health`
 
-The first refresh classifies every ingested commit, so expect it to take a
-few minutes and cost a couple of dollars in Claude calls. Every run after
-that only touches genuinely new commits.
+The first refresh classifies every ingested commit — around 20 seconds and
+under a dime for three sample profiles. Every run after that only touches
+genuinely new commits.
 
 ### 3. Frontend — Vercel
 
@@ -296,14 +296,24 @@ use. That would want real tokens and a session cookie.
 **Schema changes mean drop and re-ingest.** There is no migration tooling
 here, deliberately: the database is a cache, not the source of truth.
 Everything in it can be rebuilt from GitHub by deleting it and running a
-refresh. That's a real tradeoff — a production multi-tenant app would want
-Alembic — but for this the simpler answer is the honest one.
+refresh. `init_db()` does add nullable columns that models have grown since
+a table was created, because losing a production database to a one-column
+change is a silly way to spend money re-classifying commits — but that is a
+patch, not a migration system. Anything beyond an additive column is still
+answered by dropping the database. That's a real tradeoff — a production
+multi-tenant app would want Alembic — but for this the simpler answer is the
+honest one.
 
-**A first sync costs real money.** Each newly ingested commit is one Claude
-call. Seeding three prolific sample profiles (~300 commits) cost roughly
-$1.70 on `claude-opus-5`. Later runs are nearly free, since only genuinely
-new commits get classified. `MAX_REPOS` and `MAX_COMMITS_PER_REPO` are the
-levers if you want to spend less.
+**A first sync costs real money, but not much.** Commits are classified in
+batches of `TAGGER_BATCH_SIZE` against a fixed vocabulary. Seeding three
+prolific sample profiles (302 commits) costs roughly **$0.09** on
+`claude-haiku-4-5` — about 37k input and 11k output tokens across 13 calls,
+measured, not estimated. One call per commit on `claude-opus-5` cost ~$1.70
+for the same work: a batch spends its tokens on commits instead of on
+re-sending the same system prompt 300 times. Later runs are nearly free,
+since only genuinely new commits get classified. `MAX_REPOS`,
+`MAX_COMMITS_PER_REPO` and `MAX_COMMITS_PER_TAG_RUN` are the levers if you
+want to spend less still.
 
 **Nothing secret is committed.** `.env` is gitignored, `.env.example` ships
 with empty values, and `render.yaml` marks every secret `sync: false` so

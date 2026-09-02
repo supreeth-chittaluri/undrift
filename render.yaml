@@ -41,11 +41,15 @@ services:
       - key: SAMPLE_PROFILES
         sync: false
 
-      # Cost ceilings on a first sync: each new commit is one Claude call.
+      # Cost ceilings on a first sync. The first two bound how much history
+      # gets pulled in; the third bounds what any single refresh can spend on
+      # classification, whatever else goes wrong.
       - key: MAX_REPOS
         value: "6"
       - key: MAX_COMMITS_PER_REPO
         value: "20"
+      - key: MAX_COMMITS_PER_TAG_RUN
+        value: "600"
 
       # The free plan sleeps after ~15 minutes idle, so an in-process timer
       # cannot be relied on. The GitHub Actions cron drives refreshes instead.

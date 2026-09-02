@@ -200,6 +200,7 @@ def get_commits(
             authored_at=commit.authored_at,
             skill=commit.skill,
             skill_confidence=commit.skill_confidence,
+            skill_reason=commit.skill_reason,
             tag_source=commit.tag_source,
         )
         for commit, repo_name in session.execute(query)
