@@ -45,6 +45,9 @@ class CommitOut(BaseModel):
     authored_at: datetime
     skill: Optional[str]
     skill_confidence: Optional[float]
+    # The classifier's own one-line justification, so the dashboard can show
+    # why a commit was counted toward a skill instead of asking for trust.
+    skill_reason: Optional[str]
     tag_source: Optional[str]
 
 

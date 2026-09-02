@@ -89,6 +89,10 @@ class Commit(Base):
     # --- filled in by the skill tagger (phase 3), null until then ---
     skill: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     skill_confidence: Mapped[Optional[float]] = mapped_column(Float)
+    # The classifier's one-line justification. Storing it is what lets the
+    # dashboard answer "why do you think I know FastAPI?" with the model's
+    # own reasoning per commit, instead of asking the reader to trust a bar.
+    skill_reason: Mapped[Optional[str]] = mapped_column(String(300))
     # "llm" when Claude classified it, "fallback" when the deterministic
     # extension-based tagger did. Worth recording so we can tell how much of
     # the dashboard is actually LLM-driven.

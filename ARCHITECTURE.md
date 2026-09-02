@@ -14,8 +14,15 @@ Commits are keyed by their SHA, so running this again only picks up what's new.
 For every commit that doesn't have a label yet, the app sends the commit
 message and the changed filenames to the Claude API and asks: which single
 skill does this commit primarily exercise? The answer has to come back as
-JSON matching a fixed schema, and the skill has to be one of about twenty
-allowed values. That label gets written back onto the commit row.
+JSON matching a fixed schema, and the skill has to be one of about thirty
+allowed values. The label, the model's confidence, and its one-line reason
+all get written back onto the commit row — the reason is what lets the
+dashboard show *why* a commit counted toward a skill.
+
+Commits go up in batches of twenty-five rather than one at a time. A single
+commit is a few dozen tokens of message and filenames wrapped in a system
+prompt several times that size, so one call per commit spends most of its
+money re-sending the same instructions.
 
 **3. Plain Python computes the freshness scores.**
 This is arithmetic, not AI. Every commit decays exponentially with age: worth
