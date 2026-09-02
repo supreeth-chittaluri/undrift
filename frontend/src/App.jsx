@@ -3,22 +3,77 @@ import {
   AuthError,
   getHistory,
   getProfiles,
+  getSession,
   getSkills,
   getStatus,
   triggerRefresh,
 } from "./api";
 import { clearCredentials, getCredentials } from "./auth";
+import Landing from "./components/Landing";
 import Login from "./components/Login";
 import ProfileSwitcher from "./components/ProfileSwitcher";
 import SkillBars from "./components/SkillBars";
 import StatusBar from "./components/StatusBar";
+import SummaryTiles from "./components/SummaryTiles";
+import TrackYourself from "./components/TrackYourself";
 import TrendChart from "./components/TrendChart";
 
+// Three views, and which one you get depends on whether you signed in:
+//
+//   landing  anonymous. The marketing page, with a real dashboard embedded in
+//            it reading the public sample profiles.
+//   app      signed in. The same dashboard, defaulting to the owner's data.
+//   track    the create-your-own-profile flow, reachable from either.
+//
+// The API decides what an anonymous caller may see, not this component. The
+// frontend asks for data and renders whatever comes back; it never holds a
+// list of "private" profiles it is supposed to hide, because a check that
+// lives only in the browser is not a check at all.
+
+function Nav({ authed, onSignOut, onSignIn, onTrack, onHome }) {
+  return (
+    <nav className="nav">
+      <div className="nav-inner">
+        <a className="wordmark" href="#" onClick={onHome}>
+          <span className="mark" />
+          Undrift
+        </a>
+        <div className="nav-actions">
+          <button className="ghost nav-track" onClick={onTrack}>
+            Track your GitHub
+          </button>
+          {authed ? (
+            <button className="ghost" onClick={onSignOut}>
+              Sign out
+            </button>
+          ) : (
+            <button className="ghost" onClick={onSignIn}>
+              Sign in
+            </button>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="skill-list">
+      {[0, 1, 2, 3].map((i) => (
+        <div className="skeleton" key={i} />
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
-  // We can't know whether stored credentials are still valid until a request
-  // is made, so this starts as "we have something to try" and the first
-  // failing load flips it back to false.
-  const [authed, setAuthed] = useState(() => Boolean(getCredentials()));
+  const [authed, setAuthed] = useState(false);
+  // "landing" | "track" | "login". The dashboard is not a view of its own --
+  // it renders inside the landing page when anonymous, and on its own when
+  // signed in.
+  const [view, setView] = useState("landing");
+
   const [profiles, setProfiles] = useState([]);
   // null means "whichever profile the API considers the default" -- we don't
   // hardcode the owner's username in the frontend.
@@ -30,7 +85,18 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // One loader for all three endpoints, reused on mount and after a refresh.
+  // Stored credentials might be stale, so ask the one endpoint that still
+  // 401s rather than assuming they work. Runs once, before any data loads.
+  useEffect(() => {
+    if (!getCredentials()) return;
+    getSession()
+      .then(() => setAuthed(true))
+      .catch(() => {
+        clearCredentials();
+        setAuthed(false);
+      });
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const [p, s, h, st] = await Promise.all([
@@ -51,7 +117,11 @@ export default function App() {
       setError(null);
     } catch (err) {
       if (err instanceof AuthError) {
+        // Signing out mid-session, or a profile that turned out to be
+        // private. Drop to anonymous rather than showing a dead screen --
+        // the public data is still there to look at.
         setAuthed(false);
+        setSelected(null);
       } else {
         setError(err.message);
       }
@@ -61,14 +131,10 @@ export default function App() {
   }, [selected]);
 
   useEffect(() => {
-    if (authed) {
-      setLoading(true);
-      load();
-    }
+    setLoading(true);
+    load();
   }, [authed, load]);
 
-  // The manual button is for demos. Real refreshes come from the scheduler
-  // and the GitHub Actions cron -- see the README.
   async function handleRefresh() {
     setRefreshing(true);
     try {
@@ -85,62 +151,123 @@ export default function App() {
   function handleSignOut() {
     clearCredentials();
     setAuthed(false);
+    setSelected(null);
+    setView("landing");
   }
 
-  if (!authed) {
-    return <Login onSuccess={() => setAuthed(true)} />;
+  function handleSignedIn() {
+    setAuthed(true);
+    setSelected(null);
+    setView("landing");
   }
 
   const activeProfile = profiles.find((p) => p.username === selected);
 
-  return (
-    <div className="app">
-      <header>
-        <div className="header-row">
-          <h1>Undrift</h1>
-          <button className="ghost" onClick={handleSignOut}>Sign out</button>
+  // The dashboard proper. Rendered inside the landing page when anonymous and
+  // on its own once signed in, so there is exactly one of it.
+  const dashboard = (
+    <>
+      {profiles.length > 1 && (
+        <div style={{ marginBottom: "1rem" }}>
+          <ProfileSwitcher
+            profiles={profiles}
+            selected={selected}
+            onSelect={setSelected}
+          />
         </div>
-        <p className="tagline">
-          Which of my skills are staying sharp, and which are quietly going stale.
-        </p>
-      </header>
-
-      <ProfileSwitcher
-        profiles={profiles}
-        selected={selected}
-        onSelect={setSelected}
-      />
-
-      <StatusBar status={status} onRefresh={handleRefresh} refreshing={refreshing} />
-
-      {error && <p className="error">Could not reach the API: {error}</p>}
-      {loading ? (
-        <p className="empty">Loading…</p>
-      ) : (
-        <>
-          <section>
-            <h2>
-              Freshness now
-              {activeProfile?.is_sample && (
-                <span className="section-note">
-                  public sample data from @{activeProfile.username}
-                </span>
-              )}
-            </h2>
-            <SkillBars skills={skills} />
-          </section>
-
-          <section>
-            <h2>Drift over time</h2>
-            <TrendChart history={history} />
-          </section>
-        </>
       )}
 
+      <StatusBar
+        status={status}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+        canRefresh={authed}
+      />
+
+      {error && <p className="error" style={{ marginTop: "1rem" }}>{error}</p>}
+
+      {loading ? (
+        <div style={{ marginTop: "1.25rem" }}>
+          <Loading />
+        </div>
+      ) : (
+        <>
+          <SummaryTiles skills={skills} />
+
+          <SkillBars skills={skills} profile={selected} />
+
+          <div style={{ marginTop: "2.5rem" }}>
+            <h2 className="section-title">Drift over time</h2>
+            <p className="section-sub">
+              Freshness replayed weekly over the past six months, so the trend
+              is real history rather than a line that starts today.
+            </p>
+            <TrendChart history={history} />
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  let body;
+  if (view === "track") {
+    body = <TrackYourself onCancel={() => setView("landing")} />;
+  } else if (view === "login") {
+    body = (
+      <Login onSuccess={handleSignedIn} onCancel={() => setView("landing")} />
+    );
+  } else if (authed) {
+    body = (
+      <main className="shell" style={{ paddingTop: "2.25rem" }}>
+        <p className="eyebrow">Signed in</p>
+        <h1 className="section-title" style={{ fontSize: "1.6rem" }}>
+          {activeProfile?.is_sample
+            ? `${activeProfile.username} — sample data`
+            : "Your skills"}
+        </h1>
+        <p className="section-sub">
+          Which of your skills are staying sharp, and which are quietly going
+          stale.
+        </p>
+        {dashboard}
+      </main>
+    );
+  } else {
+    body = (
+      <Landing status={status} onTrack={() => setView("track")}>
+        {dashboard}
+      </Landing>
+    );
+  }
+
+  return (
+    <>
+      <Nav
+        authed={authed}
+        onSignOut={handleSignOut}
+        onSignIn={() => setView("login")}
+        onTrack={() => setView("track")}
+        onHome={(e) => {
+          e.preventDefault();
+          setView("landing");
+        }}
+      />
+      {body}
       <footer>
-        Freshness = 100 * w / (w + 3), where w sums each commit's decay
-        weight of 0.5 ^ (age in days / {status?.half_life_days ?? 60}).
+        <div className="shell">
+          <span>
+            freshness = 100 × w / (w + 3), where w sums each commit&rsquo;s
+            decay weight of 0.5 ^ (age in days / {status?.half_life_days ?? 60})
+          </span>
+          <a
+            href="https://github.com/supreeth-chittaluri/undrift"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Source on GitHub
+          </a>
+        </div>
       </footer>
-    </div>
+    </>
   );
 }

@@ -18,10 +18,13 @@ ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler,
 );
 
-// Fixed palette so a skill keeps the same colour between renders.
+// Fixed palette so a skill keeps the same colour between renders. These are
+// categorical -- they identify a series, they do not encode a value, so they
+// deliberately avoid the fresh/fading/stale traffic-light colours that DO
+// carry meaning elsewhere in the UI.
 const COLORS = [
-  "#4ade80", "#60a5fa", "#f472b6", "#fbbf24", "#a78bfa",
-  "#22d3ee", "#fb923c", "#f87171", "#94a3b8", "#34d399",
+  "#7c8cff", "#34d399", "#f472b6", "#fbbf24", "#22d3ee",
+  "#a78bfa", "#fb923c", "#f87171", "#8ea0c0", "#4ade80",
 ];
 
 export default function TrendChart({ history }) {
@@ -47,9 +50,10 @@ export default function TrendChart({ history }) {
         data: labels.map((d) => (byDate.has(d) ? byDate.get(d) : null)),
         borderColor: COLORS[i % COLORS.length],
         backgroundColor: `${COLORS[i % COLORS.length]}22`,
-        tension: 0.3,
+        tension: 0.35,
         spanGaps: false,
-        pointRadius: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
         borderWidth: 2,
         fill: true,
       };
@@ -63,14 +67,39 @@ export default function TrendChart({ history }) {
     scales: {
       y: {
         min: 0, max: 100,
-        title: { display: true, text: "Freshness", color: "#94a3b8" },
-        ticks: { color: "#94a3b8" },
-        grid: { color: "#1e293b" },
+        title: { display: true, text: "Freshness", color: "#5f6d88" },
+        ticks: { color: "#96a3bd", font: { size: 11 } },
+        grid: { color: "#1e2941" },
+        border: { display: false },
       },
-      x: { ticks: { color: "#94a3b8", maxTicksLimit: 10 }, grid: { display: false } },
+      x: {
+        ticks: { color: "#96a3bd", maxTicksLimit: 8, font: { size: 11 } },
+        grid: { display: false },
+        border: { color: "#1e2941" },
+      },
     },
     plugins: {
-      legend: { labels: { color: "#cbd5e1", boxWidth: 12, usePointStyle: true } },
+      legend: {
+        labels: {
+          color: "#96a3bd",
+          boxWidth: 8,
+          usePointStyle: true,
+          pointStyle: "circle",
+          font: { size: 11 },
+          padding: 14,
+        },
+      },
+      tooltip: {
+        backgroundColor: "#111828",
+        borderColor: "#2b3a5c",
+        borderWidth: 1,
+        titleColor: "#e8edf7",
+        bodyColor: "#96a3bd",
+        padding: 10,
+        cornerRadius: 8,
+        displayColors: true,
+        usePointStyle: true,
+      },
     },
   };
 

@@ -4,11 +4,27 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- On Vercel's free plan the production URL is publicly reachable, so
-         keep it out of search results. The real access gate is the API's
-         Basic auth -- this just stops the page being *found*. -->
-    <meta name="robots" content="noindex, nofollow" />
-    <title>Undrift</title>
+    <!-- The dashboard is a public read-only demo over sample profiles, so it
+         is meant to be found. The owner's own data is not served here at all:
+         it lives behind the API's Basic auth. -->
+    <meta name="robots" content="index, follow" />
+    <meta
+      name="description"
+      content="Undrift tracks which of your programming skills are staying sharp and which are quietly going stale, by scoring your real commit history on a decay curve."
+    />
+    <meta property="og:title" content="Undrift — a skill decay tracker" />
+    <meta
+      property="og:description"
+      content="Your skills decay when you stop using them. Undrift reads your commit history and shows you which ones are fading."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <title>Undrift — a skill decay tracker</title>
   </head>
   <body>
     <div id="root"></div>

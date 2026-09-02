@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { getStatus } from "../api";
+import { getSession } from "../api";
 import { clearCredentials, saveCredentials } from "../auth";
 
-// The login gate. There is no separate "login" endpoint -- Basic auth has no
+// The owner's sign-in. There is no login endpoint -- Basic auth has no
 // concept of a session -- so we save the credentials and then call a real
-// endpoint to find out whether they work. If it returns 401 we clear them
-// and show the error.
+// endpoint to find out whether they work.
+//
+// It has to be /api/session specifically. Every other read is now public, so
+// checking against one of those would return 200 for any password at all and
+// happily "sign in" a stranger. /api/session is the one route that still
+// 401s, which is exactly what makes it a valid credential check.
 
-export default function Login({ onSuccess }) {
+export default function Login({ onSuccess, onCancel }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
@@ -20,7 +24,7 @@ export default function Login({ onSuccess }) {
 
     saveCredentials(username, password);
     try {
-      await getStatus();
+      await getSession();
       onSuccess();
     } catch (err) {
       clearCredentials();
@@ -31,14 +35,18 @@ export default function Login({ onSuccess }) {
   }
 
   return (
-    <div className="login-wrap">
-      <form className="login" onSubmit={handleSubmit}>
-        <h1>Undrift</h1>
-        <p className="tagline">This dashboard is private. Sign in to continue.</p>
+    <div className="centered">
+      <form className="panel-form" onSubmit={handleSubmit}>
+        <h2>Sign in</h2>
+        <p className="section-sub">
+          Owner access, for the private profile. The sample dashboards are
+          public and need no account.
+        </p>
 
         <label htmlFor="username">Username</label>
         <input
           id="username"
+          type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoComplete="username"
@@ -55,7 +63,7 @@ export default function Login({ onSuccess }) {
           required
         />
 
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error" style={{ marginBottom: "0.9rem" }}>{error}</p>}
 
         <button type="submit" disabled={checking}>
           {checking ? "Checking…" : "Sign in"}
@@ -67,6 +75,12 @@ export default function Login({ onSuccess }) {
             a minute on the free tier.
           </p>
         )}
+
+        <p className="hint">
+          <button className="link" type="button" onClick={onCancel}>
+            Back to the public dashboard
+          </button>
+        </p>
       </form>
     </div>
   );

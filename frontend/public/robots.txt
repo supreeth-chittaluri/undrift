@@ -1,3 +1,5 @@
-# Undrift is a private dashboard. Nothing here should be indexed.
+# The dashboard is a public read-only demo over sample GitHub profiles.
+# Nothing private is served from this origin -- the owner's own data sits
+# behind HTTP Basic auth on the API, which is a different host entirely.
 User-agent: *
-Disallow: /
+Allow: /

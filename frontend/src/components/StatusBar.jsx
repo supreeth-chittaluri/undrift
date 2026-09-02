@@ -1,4 +1,6 @@
 // The "this is actually automated" strip: what the last run did and when.
+// It exists to answer the reasonable suspicion that a portfolio dashboard is
+// showing numbers somebody typed in by hand once.
 
 function timeAgo(iso) {
   if (!iso) return "never";
@@ -10,7 +12,7 @@ function timeAgo(iso) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export default function StatusBar({ status, onRefresh, refreshing }) {
+export default function StatusBar({ status, onRefresh, refreshing, canRefresh }) {
   if (!status) return null;
   const run = status.last_run;
 
@@ -28,9 +30,11 @@ export default function StatusBar({ status, onRefresh, refreshing }) {
         </span>
       </div>
 
-      <button onClick={onRefresh} disabled={refreshing}>
-        {refreshing ? "Refreshing…" : "Refresh now"}
-      </button>
+      {canRefresh && (
+        <button className="ghost" onClick={onRefresh} disabled={refreshing}>
+          {refreshing ? "Refreshing…" : "Refresh now"}
+        </button>
+      )}
     </div>
   );
 }

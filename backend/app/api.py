@@ -24,6 +24,7 @@ from .schemas import (
     ProfileOut,
     HistoryPoint,
     SkillHistoryOut,
+    SessionOut,
     SkillOut,
     StatusOut,
     SyncRunOut,
@@ -252,6 +253,31 @@ def get_commits(
         )
         for commit, repo_name in session.execute(query)
     ]
+
+
+@router.get("/session", response_model=SessionOut)
+def get_session_info(
+    session: Session = Depends(get_session),
+    caller_authed: bool = Depends(authed),
+):
+    """
+    Who the caller is signed in as. Deliberately NOT a public read path.
+
+    The login form needs an endpoint that fails for a wrong password, and
+    every other read is now public -- validating against one of those would
+    accept any password at all. This route is the one that still 401s, which
+    is exactly what makes it usable as a credential check.
+
+    It also hands back the owner's username, so the dashboard can open on the
+    right profile without the frontend hardcoding whose dashboard it is.
+    """
+    owner = session.scalar(
+        select(Profile).where(Profile.is_sample.is_(False)).order_by(Profile.id)
+    )
+    return SessionOut(
+        authenticated=caller_authed,
+        owner=owner.username if owner else None,
+    )
 
 
 @router.get("/status", response_model=StatusOut)

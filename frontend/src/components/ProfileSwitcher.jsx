@@ -17,7 +17,11 @@ export default function ProfileSwitcher({ profiles, selected, onSelect }) {
         >
           <span className="profile-name">{p.display_name || p.username}</span>
           <span className="profile-count">{p.commit_count}</span>
-          {p.is_sample && <span className="sample-badge">sample</span>}
+          {p.is_sample ? (
+            <span className="badge">sample</span>
+          ) : (
+            <span className="badge">you</span>
+          )}
         </button>
       ))}
     </div>
