@@ -1,0 +1,114 @@
+"""
+Database models.
+
+Four tables, and the whole app is explainable from them:
+
+  repos        -- the GitHub repositories we pull from
+  commits      -- one row per commit, plus the skill tag the LLM assigned it
+  skill_scores -- a snapshot of every skill's freshness at one point in time
+  sync_runs    -- a log of each automated refresh, so we can prove it's running
+
+skill_scores is deliberately append-only rather than a single updated row:
+keeping every snapshot is what lets the dashboard draw a trend line showing a
+skill fading over time, instead of only its value right now.
+
+All timestamps are naive UTC (see db.utcnow for why).
+"""
+
+from datetime import datetime
+from typing import List, Optional
+
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .db import Base, utcnow
+
+
+class Repo(Base):
+    __tablename__ = "repos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    full_name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    primary_language: Mapped[Optional[str]] = mapped_column(String(64))
+    is_private: Mapped[bool] = mapped_column(default=False)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    commits: Mapped[List["Commit"]] = relationship(back_populates="repo")
+
+    def __repr__(self) -> str:
+        return f"<Repo {self.full_name}>"
+
+
+class Commit(Base):
+    __tablename__ = "commits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    repo_id: Mapped[int] = mapped_column(ForeignKey("repos.id"), index=True)
+    sha: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+
+    message: Mapped[str] = mapped_column(Text, default="")
+    authored_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    # Newline-separated list of changed file paths. Stored as text because we
+    # only ever feed it to the classifier -- we never query inside it.
+    files_changed: Mapped[str] = mapped_column(Text, default="")
+    additions: Mapped[int] = mapped_column(Integer, default=0)
+    deletions: Mapped[int] = mapped_column(Integer, default=0)
+
+    # --- filled in by the skill tagger (phase 3), null until then ---
+    skill: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    skill_confidence: Mapped[Optional[float]] = mapped_column(Float)
+    # "llm" when Claude classified it, "fallback" when the deterministic
+    # extension-based tagger did. Worth recording so we can tell how much of
+    # the dashboard is actually LLM-driven.
+    tag_source: Mapped[Optional[str]] = mapped_column(String(16))
+    tagged_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    repo: Mapped["Repo"] = relationship(back_populates="commits")
+
+    def __repr__(self) -> str:
+        return f"<Commit {self.sha[:7]} skill={self.skill}>"
+
+
+class SkillScore(Base):
+    __tablename__ = "skill_scores"
+    # One row per skill per scoring run.
+    __table_args__ = (UniqueConstraint("skill", "computed_at", name="uq_skill_run"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    skill: Mapped[str] = mapped_column(String(64), index=True)
+
+    # 0-100, the number the dashboard bars actually render.
+    freshness: Mapped[float] = mapped_column(Float)
+    # The raw decayed weight before it was normalised to 0-100. Kept so the
+    # math is inspectable and the normalisation isn't a black box.
+    raw_weight: Mapped[float] = mapped_column(Float)
+
+    commit_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_commit_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    days_since_last: Mapped[float] = mapped_column(Float, default=0.0)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, index=True, default=utcnow)
+
+    def __repr__(self) -> str:
+        return f"<SkillScore {self.skill} {self.freshness:.1f}>"
+
+
+class SyncRun(Base):
+    __tablename__ = "sync_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # "scheduler" | "cron" | "manual" -- proves automated ingestion is real.
+    trigger: Mapped[str] = mapped_column(String(16), default="manual")
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    repos_synced: Mapped[int] = mapped_column(Integer, default=0)
+    commits_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    commits_tagged: Mapped[int] = mapped_column(Integer, default=0)
+    skills_scored: Mapped[int] = mapped_column(Integer, default=0)
+
+    status: Mapped[str] = mapped_column(String(16), default="running")
+    error: Mapped[Optional[str]] = mapped_column(Text)
+
+    def __repr__(self) -> str:
+        return f"<SyncRun {self.id} {self.trigger} {self.status}>"

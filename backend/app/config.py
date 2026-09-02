@@ -1,0 +1,83 @@
+"""
+Central configuration for Undrift.
+
+Every value comes from environment variables (loaded from the project-root
+.env file in local development). Nothing sensitive is ever hardcoded here —
+the .env file is gitignored and only .env.example, with empty values, is
+committed.
+"""
+
+from pathlib import Path
+from typing import List, Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# backend/app/config.py -> backend/app -> backend -> <project root>
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=PROJECT_ROOT / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # --- Database -------------------------------------------------------
+    # SQLite for local dev, a real Postgres URL in production.
+    database_url: str = "sqlite:///./undrift.db"
+
+    # --- GitHub ingestion ----------------------------------------------
+    github_token: str = ""
+    # Optional pinned list, e.g. "owner/repo-a,owner/repo-b".
+    # When left empty we auto-discover the token owner's repositories.
+    github_repos: str = ""
+    # How many of the most recently pushed repos to ingest when auto-discovering.
+    max_repos: int = 10
+    # Only ingest commits newer than this. Two years gives the decay curve
+    # enough history to actually show something fading.
+    commit_lookback_days: int = 730
+
+    # --- LLM skill tagging ----------------------------------------------
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-5"
+
+    # --- Auth ------------------------------------------------------------
+    app_username: str = ""
+    app_password: str = ""
+
+    # --- Decay algorithm --------------------------------------------------
+    # Days for a single commit's weight to fall to half its original value.
+    # 60 days is a deliberate choice: short enough that a skill you dropped
+    # last quarter visibly fades, long enough that a two-week holiday doesn't
+    # tank your scores. See scoring.py for the full explanation.
+    decay_half_life_days: float = 60.0
+
+    # --- Scheduling -------------------------------------------------------
+    # Hours between automatic refresh runs by the in-process scheduler.
+    refresh_interval_hours: int = 12
+    # Set false on hosts that sleep (Render free tier) and drive refreshes
+    # from the GitHub Actions cron instead.
+    enable_scheduler: bool = True
+
+    @property
+    def tracked_repos(self) -> List[str]:
+        """Parse GITHUB_REPOS into a clean list. Empty list = auto-discover."""
+        return [r.strip() for r in self.github_repos.split(",") if r.strip()]
+
+    @property
+    def normalized_database_url(self) -> str:
+        """
+        Neon/Render/Supabase hand out URLs starting with `postgres://`, but
+        SQLAlchemy 2.x wants an explicit driver. Rewrite it so the same env
+        var works locally and in production without anyone editing it.
+        """
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg://", 1)
+        elif url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
+
+
+settings = Settings()
