@@ -1,0 +1,85 @@
+:root {
+  --bg: #0b1220;
+  --panel: #131c2e;
+  --border: #223049;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --fresh: #4ade80;
+  --fading: #fbbf24;
+  --stale: #f87171;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app { max-width: 880px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+
+header h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; }
+.tagline { color: var(--muted); margin: 0.35rem 0 1.5rem; }
+
+h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.08em;
+     color: var(--muted); margin: 2.25rem 0 0.9rem; font-weight: 600; }
+
+/* --- status bar --- */
+.status-bar {
+  display: flex; flex-wrap: wrap; gap: 0.75rem;
+  align-items: center; justify-content: space-between;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 0.75rem 1rem;
+}
+.status-items { display: flex; flex-wrap: wrap; gap: 1.1rem;
+                font-size: 0.82rem; color: var(--muted); }
+.status-items strong { color: var(--text); }
+.run-error strong { color: var(--stale); }
+
+button {
+  background: #1d4ed8; color: white; border: 0; border-radius: 7px;
+  padding: 0.45rem 0.9rem; font-size: 0.82rem; cursor: pointer;
+}
+button:hover:not(:disabled) { background: #2563eb; }
+button:disabled { opacity: 0.55; cursor: default; }
+
+/* --- skill bars --- */
+.skill-list { list-style: none; margin: 0; padding: 0;
+              display: flex; flex-direction: column; gap: 0.9rem; }
+.skill { background: var(--panel); border: 1px solid var(--border);
+         border-radius: 10px; padding: 0.85rem 1rem; }
+.skill-head { display: flex; justify-content: space-between;
+              align-items: baseline; margin-bottom: 0.5rem; }
+.skill-name { font-weight: 600; }
+.skill-score { font-variant-numeric: tabular-nums; font-size: 0.95rem; }
+
+.bar-track { height: 8px; background: #1b2438; border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+
+.skill.fresh  .bar-fill { background: var(--fresh); }
+.skill.fading .bar-fill { background: var(--fading); }
+.skill.stale  .bar-fill { background: var(--stale); }
+.skill.fresh  .skill-score { color: var(--fresh); }
+.skill.fading .skill-score { color: var(--fading); }
+.skill.stale  .skill-score { color: var(--stale); }
+
+/* A stale skill's whole card sits back visually. */
+.skill.stale { opacity: 0.72; }
+
+.skill-meta { display: flex; gap: 1rem; margin-top: 0.55rem;
+              font-size: 0.75rem; color: var(--muted); }
+.delta.up { color: var(--fresh); }
+.delta.down { color: var(--stale); }
+.delta.flat { opacity: 0.6; }
+
+/* --- chart --- */
+.chart-wrap { background: var(--panel); border: 1px solid var(--border);
+              border-radius: 10px; padding: 1rem; height: 340px; }
+
+.empty { color: var(--muted); font-size: 0.9rem; }
+.error { color: var(--stale); font-size: 0.9rem; }
+
+footer { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border);
+         color: var(--muted); font-size: 0.78rem; }
