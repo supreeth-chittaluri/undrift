@@ -1,0 +1,38 @@
+# Render blueprint for the Undrift API.
+#
+# Secrets are marked `sync: false`, which means Render prompts for them in the
+# dashboard and never reads them from this file -- no credential is committed.
+services:
+  - type: web
+    name: undrift-api
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT"
+    # Render polls this to decide the service is up. It is the one route the
+    # auth middleware leaves public, which is why the check can reach it.
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.14"
+
+      # --- secrets: set these in the Render dashboard ---
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_USERNAME
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+
+      # The deployed dashboard's origin, so CORS lets it call this API.
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      # The free plan sleeps after ~15 minutes idle, so an in-process timer
+      # cannot be relied on. The GitHub Actions cron drives refreshes instead.
+      - key: ENABLE_SCHEDULER
+        value: "false"
