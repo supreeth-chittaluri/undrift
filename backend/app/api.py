@@ -9,10 +9,11 @@ fast and always shows the same numbers the scheduler computed.
 from datetime import timedelta
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
+from .auth import is_authenticated
 from .config import settings
 from .db import get_session, utcnow
 from .models import Commit, Profile, Repo, SkillScore, SyncRun
@@ -31,23 +32,44 @@ from .schemas import (
 router = APIRouter(prefix="/api", tags=["undrift"])
 
 
-def resolve_profile(session: Session, username: Optional[str]) -> Profile:
-    """
-    Find the profile to report on.
+def authed(request: Request) -> bool:
+    """Whether this request carried valid credentials. Set by the middleware."""
+    return is_authenticated(request)
 
-    With no `profile` query param we default to the owner -- the first
-    non-sample profile -- so the dashboard opens on the real one rather than
-    on demo data.
+
+def resolve_profile(
+    session: Session, username: Optional[str], authed: bool = True
+) -> Profile:
+    """
+    Find the profile to report on, and refuse it if the caller may not see it.
+
+    An authenticated caller defaults to the owner -- the first non-sample
+    profile -- so signing in opens on your own data rather than on demo data.
+    An anonymous caller defaults to the first sample profile, so the public
+    link opens on a populated dashboard rather than an error.
+
+    Naming a private profile anonymously is a 401 rather than a 404. The
+    owner's GitHub username is in the repository and the README; pretending
+    the profile does not exist would buy no secrecy and would send an honest
+    visitor looking for a typo instead of a login button.
     """
     if username:
         profile = session.scalar(select(Profile).where(Profile.username == username))
         if profile is None:
             raise HTTPException(404, f"No tracked profile named '{username}'.")
+        if not authed and not profile.is_sample:
+            raise HTTPException(
+                401,
+                f"'{username}' is a private profile. Sign in to view it.",
+                headers={"WWW-Authenticate": 'Basic realm="Undrift"'},
+            )
         return profile
 
-    profile = session.scalar(
-        select(Profile).where(Profile.is_sample.is_(False)).order_by(Profile.id)
+    query = select(Profile).order_by(Profile.id)
+    query = query.where(
+        Profile.is_sample.is_(True) if not authed else Profile.is_sample.is_(False)
     )
+    profile = session.scalar(query)
     if profile is None:
         raise HTTPException(404, "No profiles have been ingested yet.")
     return profile
@@ -66,11 +88,21 @@ def _snapshot_timestamps(session: Session, profile_id: int, limit: int = 2) -> L
 
 
 @router.get("/profiles", response_model=List[ProfileOut])
-def get_profiles(session: Session = Depends(get_session)):
-    """Everyone being tracked. The dashboard uses this to build its switcher."""
-    rows = session.scalars(
-        select(Profile).order_by(Profile.is_sample, Profile.id)
-    ).all()
+def get_profiles(
+    session: Session = Depends(get_session),
+    caller_authed: bool = Depends(authed),
+):
+    """
+    Everyone being tracked. The dashboard uses this to build its switcher.
+
+    Anonymous callers see only the sample profiles -- the switcher then simply
+    has no tab for the owner, rather than showing one that errors when
+    clicked.
+    """
+    query = select(Profile).order_by(Profile.is_sample, Profile.id)
+    if not caller_authed:
+        query = query.where(Profile.is_sample.is_(True))
+    rows = session.scalars(query).all()
     return [
         ProfileOut(
             username=p.username,
@@ -90,6 +122,7 @@ def get_profiles(session: Session = Depends(get_session)):
 def get_skills(
     profile: Optional[str] = None,
     session: Session = Depends(get_session),
+    caller_authed: bool = Depends(authed),
 ):
     """
     Current freshness for every skill, highest first.
@@ -97,7 +130,7 @@ def get_skills(
     `delta` compares each skill against the previous snapshot, which is what
     tells you whether a skill is trending toward or away from staleness.
     """
-    target = resolve_profile(session, profile)
+    target = resolve_profile(session, profile, caller_authed)
     stamps = _snapshot_timestamps(session, target.id, limit=2)
     if not stamps:
         return []
@@ -157,9 +190,10 @@ def get_history(
     weeks: int = Query(26, ge=1, le=104),
     profile: Optional[str] = None,
     session: Session = Depends(get_session),
+    caller_authed: bool = Depends(authed),
 ):
     """Freshness over time per skill -- the data behind the trend chart."""
-    target = resolve_profile(session, profile)
+    target = resolve_profile(session, profile, caller_authed)
     cutoff = utcnow() - timedelta(weeks=weeks)
     rows = session.scalars(
         select(SkillScore)
@@ -190,9 +224,10 @@ def get_commits(
     skill: Optional[str] = None,
     profile: Optional[str] = None,
     session: Session = Depends(get_session),
+    caller_authed: bool = Depends(authed),
 ):
     """Recent commits and how they were tagged -- the evidence behind a score."""
-    target = resolve_profile(session, profile)
+    target = resolve_profile(session, profile, caller_authed)
     query = (
         select(Commit, Repo.full_name)
         .join(Repo, Commit.repo_id == Repo.id)
@@ -220,13 +255,23 @@ def get_commits(
 
 
 @router.get("/status", response_model=StatusOut)
-def get_status(session: Session = Depends(get_session)):
+def get_status(
+    session: Session = Depends(get_session),
+    caller_authed: bool = Depends(authed),
+):
     """Counts and last-run info, so the dashboard can show the data is live."""
 
     def count(model, *where):
         return session.scalar(select(func.count()).select_from(model).where(*where)) or 0
 
     run = latest_run(session)
+    last_run = SyncRunOut.model_validate(run, from_attributes=True) if run else None
+    if last_run is not None and not caller_authed:
+        # A failed run's error carries tracebacks, table names and sometimes a
+        # connection string. Anonymous callers get to see THAT the last run
+        # failed -- that is the honest status -- but not the details.
+        last_run.error = "hidden" if last_run.error else None
+
     return StatusOut(
         total_profiles=count(Profile),
         total_repos=count(Repo),
@@ -243,7 +288,7 @@ def get_status(session: Session = Depends(get_session)):
         # exists in the database but is missing here, its data is frozen --
         # exactly the silent failure that SAMPLE_PROFILES being unset causes.
         tracked_usernames=sorted(settings.sample_usernames),
-        last_run=SyncRunOut.model_validate(run, from_attributes=True) if run else None,
+        last_run=last_run,
     )
 
 
