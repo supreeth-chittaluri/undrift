@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     app_username: str = ""
     app_password: str = ""
 
+
+    # --- Frontend / CORS --------------------------------------------------
+    # Comma-separated list of origins allowed to call the API. In production
+    # this is the Vercel URL; locally it's the Vite dev server.
+    allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
     # --- Decay algorithm --------------------------------------------------
     # Days for a single commit's weight to fall to half its original value.
     # 60 days is a deliberate choice: short enough that a skill you dropped
@@ -78,6 +84,11 @@ class Settings(BaseSettings):
         elif url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+psycopg://", 1)
         return url
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """Parse ALLOWED_ORIGINS into the list CORSMiddleware expects."""
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
 
 settings = Settings()
