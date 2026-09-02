@@ -15,7 +15,10 @@ function band(freshness) {
 
 function Delta({ value }) {
   if (value === null || value === undefined) return null;
-  if (Math.abs(value) < 0.01) return <span className="delta flat">no change</span>;
+  // Below what the label can actually show (one decimal place), call it flat.
+  // Consecutive scoring runs minutes apart produce deltas like -0.01, which
+  // otherwise rendered as a meaningless "down 0.0".
+  if (Math.abs(value) < 0.05) return <span className="delta flat">no change</span>;
   const up = value > 0;
   return (
     <span className={`delta ${up ? "up" : "down"}`}>
