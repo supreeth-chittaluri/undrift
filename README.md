@@ -185,7 +185,19 @@ produces a value the next one needs.
 
 Create a project at [neon.tech](https://neon.tech) and copy the connection
 string. `postgres://` and `postgresql://` both work; the app rewrites either
-to the psycopg driver itself, so paste it unchanged.
+to `postgresql+psycopg://` itself, so paste it unchanged. That rewrite is not
+cosmetic — SQLAlchemy resolves a bare `postgresql://` to psycopg2, which this
+project doesn't install, so without it the app dies at startup.
+
+Use the **pooled** endpoint (the one with `-pooler` in the host). Neon runs
+PgBouncer in transaction mode, which historically broke Python drivers that
+use protocol-level prepared statements — but Neon's PgBouncer is 1.22+ and
+psycopg 3.2+ handles it, so no `prepare_threshold` workaround is needed. If
+you ever see `prepared statement "..." already exists`, that assumption has
+broken; the fix is `connect_args={"prepare_threshold": None}` in `db.py`.
+
+The schema is created by `create_all()` on startup, so there is no separate
+migration step to point at a direct connection.
 
 ### 2. Backend — Render
 

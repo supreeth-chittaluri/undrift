@@ -91,6 +91,23 @@ class Settings(BaseSettings):
         Neon/Render/Supabase hand out URLs starting with `postgres://`, but
         SQLAlchemy 2.x wants an explicit driver. Rewrite it so the same env
         var works locally and in production without anyone editing it.
+
+        This is not cosmetic: SQLAlchemy resolves a bare `postgresql://` to
+        psycopg2, which this project does not install, so the app would die
+        at startup with ModuleNotFoundError instead of connecting.
+
+        >>> Settings(database_url="postgres://u:p@h/db").normalized_database_url
+        'postgresql+psycopg://u:p@h/db'
+        >>> Settings(database_url="postgresql://u:p@h/db").normalized_database_url
+        'postgresql+psycopg://u:p@h/db'
+        >>> Settings(database_url="sqlite:///./undrift.db").normalized_database_url
+        'sqlite:///./undrift.db'
+
+        Query parameters survive, which matters because Neon appends them:
+
+        >>> Settings(database_url="postgres://u:p@h/db?sslmode=require"
+        ...          ).normalized_database_url
+        'postgresql+psycopg://u:p@h/db?sslmode=require'
         """
         url = self.database_url
         if url.startswith("postgres://"):
