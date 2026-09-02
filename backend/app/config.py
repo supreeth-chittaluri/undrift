@@ -32,8 +32,17 @@ class Settings(BaseSettings):
     # Optional pinned list, e.g. "owner/repo-a,owner/repo-b".
     # When left empty we auto-discover the token owner's repositories.
     github_repos: str = ""
-    # How many of the most recently pushed repos to ingest when auto-discovering.
+    # How many of the most recently pushed repos to ingest per profile.
     max_repos: int = 10
+    # Ceiling on commits stored per repo. Every new commit costs one Claude
+    # call, so this is the main lever on how much a sync run costs.
+    max_commits_per_repo: int = 40
+
+    # --- Profiles ---------------------------------------------------------
+    # Public GitHub accounts seeded as demo data, comma-separated. They are
+    # flagged is_sample in the database so the dashboard can label them as
+    # samples rather than implying their work is the owner's.
+    sample_profiles: str = ""
     # Only ingest commits newer than this. Two years gives the decay curve
     # enough history to actually show something fading.
     commit_lookback_days: int = 730
@@ -70,6 +79,11 @@ class Settings(BaseSettings):
     def tracked_repos(self) -> List[str]:
         """Parse GITHUB_REPOS into a clean list. Empty list = auto-discover."""
         return [r.strip() for r in self.github_repos.split(",") if r.strip()]
+
+    @property
+    def sample_usernames(self) -> List[str]:
+        """Parse SAMPLE_PROFILES into a clean list."""
+        return [u.strip() for u in self.sample_profiles.split(",") if u.strip()]
 
     @property
     def normalized_database_url(self) -> str:

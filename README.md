@@ -1,9 +1,15 @@
 # Undrift
 
-A skill decay tracker. It pulls my GitHub commit history automatically, uses
+A skill decay tracker. It pulls GitHub commit history automatically, uses
 Claude to tag which skill each commit exercises, and computes a
-recency-weighted freshness score per skill — so I can see which skills are
+recency-weighted freshness score per skill — so you can see which skills are
 staying sharp and which are quietly going stale.
+
+It tracks several people at once. Each tracked person is a **profile** (just a
+GitHub username), and the dashboard has a switcher to move between them.
+Profiles listed in `SAMPLE_PROFILES` are public accounts seeded as demo data;
+they read only public information, and the UI labels them as samples so their
+work is never presented as yours.
 
 **[ARCHITECTURE.md](ARCHITECTURE.md) explains the data flow in five steps.**
 
@@ -106,6 +112,7 @@ Fill in `.env`. The four that matter:
 | `ANTHROPIC_API_KEY` | From [console.anthropic.com](https://console.anthropic.com) |
 | `GITHUB_TOKEN` | A **fine-grained** token — see the security note below |
 | `APP_USERNAME` / `APP_PASSWORD` | Anything; the API refuses to serve without them |
+| `SAMPLE_PROFILES` | Optional. Public GitHub usernames to seed as demo profiles |
 
 Run the API:
 
@@ -135,12 +142,16 @@ PYTHONPATH=backend ./.venv/bin/python -c "from app.db import SessionLocal, init_
 
 Every route requires HTTP Basic auth except `/health`.
 
+Endpoints that report on a person take an optional `?profile=<username>`.
+Omitting it falls back to the owner profile — the first non-sample one.
+
 | Route | Returns |
 |---|---|
 | `GET /health` | Liveness — the only public route, so Render can probe it |
-| `GET /api/skills` | Current freshness per skill, with the change since the last snapshot |
-| `GET /api/skills/history?weeks=26` | Freshness over time, for the trend chart |
-| `GET /api/commits?limit=50` | Recent commits and how each was tagged |
+| `GET /api/profiles` | Everyone being tracked, with commit counts and sample flags |
+| `GET /api/skills?profile=` | Current freshness per skill, with the change since the last snapshot |
+| `GET /api/skills/history?weeks=26&profile=` | Freshness over time, for the trend chart |
+| `GET /api/commits?limit=50&profile=` | Recent commits and how each was tagged |
 | `GET /api/status` | Row counts and the last sync run |
 | `POST /api/refresh?trigger=cron` | Runs ingest → tag → score |
 
@@ -220,6 +231,18 @@ can replay is readable by scripts on the page — an acceptable tradeoff for a
 single-user private dashboard, but not the design a multi-user product should
 use. That would want real tokens and a session cookie.
 
+**Schema changes mean drop and re-ingest.** There is no migration tooling
+here, deliberately: the database is a cache, not the source of truth.
+Everything in it can be rebuilt from GitHub by deleting it and running a
+refresh. That's a real tradeoff — a production multi-tenant app would want
+Alembic — but for this the simpler answer is the honest one.
+
+**A first sync costs real money.** Each newly ingested commit is one Claude
+call. Seeding three prolific sample profiles (~300 commits) cost roughly
+$1.70 on `claude-opus-5`. Later runs are nearly free, since only genuinely
+new commits get classified. `MAX_REPOS` and `MAX_COMMITS_PER_REPO` are the
+levers if you want to spend less.
+
 **Nothing secret is committed.** `.env` is gitignored, `.env.example` ships
 with empty values, and `render.yaml` marks every secret `sync: false` so
 Render prompts for it instead of reading it from the repo.
@@ -231,7 +254,7 @@ Render prompts for it instead of reading it from the repo.
 ```
 backend/app/
   config.py         settings from environment variables
-  models.py         repos, commits, skill_scores, sync_runs
+  models.py         profiles, repos, commits, skill_scores, sync_runs
   github_client.py  the four GitHub calls the app needs
   ingest.py         pull commits, skip SHAs already stored
   skill_tagger.py   Claude call, schema-validated, with a fallback
@@ -243,5 +266,5 @@ backend/app/
 frontend/src/
   App.jsx           layout and data loading
   api.js            every backend call, in one place
-  components/       Login, SkillBars, TrendChart, StatusBar
+  components/       Login, ProfileSwitcher, SkillBars, TrendChart, StatusBar
 ```

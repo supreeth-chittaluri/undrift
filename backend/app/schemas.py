@@ -7,6 +7,14 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
+class ProfileOut(BaseModel):
+    username: str
+    display_name: Optional[str]
+    is_sample: bool
+    commit_count: int
+    last_synced_at: Optional[datetime]
+
+
 class SkillOut(BaseModel):
     skill: str
     freshness: float
@@ -32,6 +40,7 @@ class SkillHistoryOut(BaseModel):
 class CommitOut(BaseModel):
     sha: str
     repo: str
+    profile: str
     message: str
     authored_at: datetime
     skill: Optional[str]
@@ -53,6 +62,7 @@ class SyncRunOut(BaseModel):
 
 
 class StatusOut(BaseModel):
+    total_profiles: int
     total_repos: int
     total_commits: int
     tagged_commits: int

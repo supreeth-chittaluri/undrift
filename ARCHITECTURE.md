@@ -3,11 +3,12 @@
 ## The five steps
 
 **1. Commits come in from GitHub.**
-A scheduled job asks the GitHub API for every commit I authored in the last
-two years, across my repositories. It discovers those repositories itself
-rather than reading a hand-maintained list. Each commit is stored with its
-message and the list of files it changed. Commits are keyed by their SHA, so
-running this again only ever picks up what's new.
+Undrift tracks a list of people — each one is a *profile*, which is just a
+GitHub username. For every profile, a scheduled job asks the GitHub API for
+the commits that person authored in the last two years, discovering their
+repositories itself rather than reading a hand-maintained list. Each commit is
+stored with its message, its changed files, and which profile wrote it.
+Commits are keyed by their SHA, so running this again only picks up what's new.
 
 **2. Claude labels each commit with one skill.**
 For every commit that doesn't have a label yet, the app sends the commit
@@ -25,22 +26,26 @@ touching it, and it slides toward zero on its own.
 
 **4. Postgres stores the commits and a history of scores.**
 Scores aren't overwritten. Every scoring run appends a new dated snapshot of
-every skill, so the database accumulates a record of how each skill's
-freshness moved over time — which is what the trend chart draws.
+every skill for every profile, so the database accumulates a record of how
+each skill's freshness moved over time — which is what the trend chart draws.
+Scoring is always scoped to one profile, so two people's commits never get
+summed into the same curve.
 
 **5. The dashboard reads it, and a cron keeps it current.**
-A React app fetches the latest snapshot and renders a bar per skill, faded in
-proportion to how stale it is, plus a line chart of the history. Nobody has to
-press anything: a GitHub Actions cron hits the refresh endpoint twice a day,
-which runs steps 1 through 4 again.
+A React app fetches the latest snapshot for the selected profile and renders a
+bar per skill, faded in proportion to how stale it is, plus a line chart of the
+history. A switcher at the top swaps between profiles. Nobody has to press
+anything: a GitHub Actions cron hits the refresh endpoint twice a day, which
+runs steps 1 through 4 again.
 
 ---
 
 ## The one-sentence version
 
-GitHub gives me commits, Claude labels each one with a skill, exponential
-decay math turns those labels into a freshness score, Postgres keeps every
-snapshot so I can see the trend, and a cron runs the whole thing twice a day.
+GitHub gives me commits for each tracked person, Claude labels each one with a
+skill, exponential decay math turns those labels into a freshness score per
+person, Postgres keeps every snapshot so I can see the trend, and a cron runs
+the whole thing twice a day.
 
 ---
 
@@ -73,6 +78,14 @@ about fifteen minutes idle, and a sleeping process can't fire its own timer.
 The GitHub Actions cron calls the service from outside, which wakes it. The
 scheduler is the clean answer; the cron is the one that survives free hosting.
 
+**Why sample profiles exist, and why they're labelled.**
+My own account has very few commits, so my curves alone would be a flat line
+near zero — technically correct and useless as a demonstration. Undrift also
+tracks a few prolific *public* GitHub accounts, which gives real multi-language
+decay curves to look at. They only ever read public data, they're flagged
+`is_sample` in the database, and the dashboard prints "public sample data from
+@username" above their scores so their work is never presented as mine.
+
 **Why history can be drawn on day one.**
 A score for any date is a pure function of the commits that existed by then,
 so on a fresh database the app replays the same formula at weekly intervals
@@ -85,8 +98,8 @@ than drawing a zero.
 ## The pieces
 
 ```
-GitHub API ──▶ ingest.py ──▶ ┌──────────┐
-                             │  commits │
+GitHub API ──▶ ingest.py ──▶ ┌──────────┐   (one row per profile
+                             │  commits │    per commit)
 Claude API ──▶ skill_tagger ▶└──────────┘
                                    │
                              scoring.py  (exponential decay)
@@ -106,7 +119,7 @@ Claude API ──▶ skill_tagger ▶└──────────┘
 | File | What it does |
 |---|---|
 | `config.py` | Reads every setting from environment variables |
-| `models.py` | Four tables: repos, commits, skill_scores, sync_runs |
+| `models.py` | Five tables: profiles, repos, commits, skill_scores, sync_runs |
 | `github_client.py` | The four GitHub API calls the app needs |
 | `ingest.py` | Pulls commits, skipping SHAs already stored |
 | `skill_tagger.py` | Claude call, schema-validated, with a fallback tagger |

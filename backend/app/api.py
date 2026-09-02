@@ -9,16 +9,17 @@ fast and always shows the same numbers the scheduler computed.
 from datetime import timedelta
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import get_session, utcnow
-from .models import Commit, Repo, SkillScore, SyncRun
+from .models import Commit, Profile, Repo, SkillScore, SyncRun
 from .pipeline import latest_run, run_refresh
 from .schemas import (
     CommitOut,
+    ProfileOut,
     HistoryPoint,
     SkillHistoryOut,
     SkillOut,
@@ -29,31 +30,82 @@ from .schemas import (
 router = APIRouter(prefix="/api", tags=["undrift"])
 
 
-def _snapshot_timestamps(session: Session, limit: int = 2) -> List:
-    """The most recent distinct scoring-run timestamps, newest first."""
+def resolve_profile(session: Session, username: Optional[str]) -> Profile:
+    """
+    Find the profile to report on.
+
+    With no `profile` query param we default to the owner -- the first
+    non-sample profile -- so the dashboard opens on the real one rather than
+    on demo data.
+    """
+    if username:
+        profile = session.scalar(select(Profile).where(Profile.username == username))
+        if profile is None:
+            raise HTTPException(404, f"No tracked profile named '{username}'.")
+        return profile
+
+    profile = session.scalar(
+        select(Profile).where(Profile.is_sample.is_(False)).order_by(Profile.id)
+    )
+    if profile is None:
+        raise HTTPException(404, "No profiles have been ingested yet.")
+    return profile
+
+
+def _snapshot_timestamps(session: Session, profile_id: int, limit: int = 2) -> List:
+    """The most recent distinct scoring-run timestamps for one profile."""
     return list(
         session.scalars(
             select(distinct(SkillScore.computed_at))
+            .where(SkillScore.profile_id == profile_id)
             .order_by(SkillScore.computed_at.desc())
             .limit(limit)
         )
     )
 
 
+@router.get("/profiles", response_model=List[ProfileOut])
+def get_profiles(session: Session = Depends(get_session)):
+    """Everyone being tracked. The dashboard uses this to build its switcher."""
+    rows = session.scalars(
+        select(Profile).order_by(Profile.is_sample, Profile.id)
+    ).all()
+    return [
+        ProfileOut(
+            username=p.username,
+            display_name=p.display_name,
+            is_sample=p.is_sample,
+            commit_count=session.scalar(
+                select(func.count()).select_from(Commit).where(Commit.profile_id == p.id)
+            )
+            or 0,
+            last_synced_at=p.last_synced_at,
+        )
+        for p in rows
+    ]
+
+
 @router.get("/skills", response_model=List[SkillOut])
-def get_skills(session: Session = Depends(get_session)):
+def get_skills(
+    profile: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
     """
     Current freshness for every skill, highest first.
 
     `delta` compares each skill against the previous snapshot, which is what
     tells you whether a skill is trending toward or away from staleness.
     """
-    stamps = _snapshot_timestamps(session, limit=2)
+    target = resolve_profile(session, profile)
+    stamps = _snapshot_timestamps(session, target.id, limit=2)
     if not stamps:
         return []
 
     current = session.scalars(
-        select(SkillScore).where(SkillScore.computed_at == stamps[0])
+        select(SkillScore).where(
+            SkillScore.profile_id == target.id,
+            SkillScore.computed_at == stamps[0],
+        )
     ).all()
 
     previous: Dict[str, float] = {}
@@ -61,7 +113,10 @@ def get_skills(session: Session = Depends(get_session)):
         previous = {
             row.skill: row.freshness
             for row in session.scalars(
-                select(SkillScore).where(SkillScore.computed_at == stamps[1])
+                select(SkillScore).where(
+                    SkillScore.profile_id == target.id,
+                    SkillScore.computed_at == stamps[1],
+                )
             )
         }
 
@@ -88,13 +143,18 @@ def get_skills(session: Session = Depends(get_session)):
 @router.get("/skills/history", response_model=List[SkillHistoryOut])
 def get_history(
     weeks: int = Query(26, ge=1, le=104),
+    profile: Optional[str] = None,
     session: Session = Depends(get_session),
 ):
     """Freshness over time per skill -- the data behind the trend chart."""
+    target = resolve_profile(session, profile)
     cutoff = utcnow() - timedelta(weeks=weeks)
     rows = session.scalars(
         select(SkillScore)
-        .where(SkillScore.computed_at >= cutoff)
+        .where(
+            SkillScore.profile_id == target.id,
+            SkillScore.computed_at >= cutoff,
+        )
         .order_by(SkillScore.computed_at.asc())
     ).all()
 
@@ -116,12 +176,15 @@ def get_history(
 def get_commits(
     limit: int = Query(50, ge=1, le=200),
     skill: Optional[str] = None,
+    profile: Optional[str] = None,
     session: Session = Depends(get_session),
 ):
     """Recent commits and how they were tagged -- the evidence behind a score."""
+    target = resolve_profile(session, profile)
     query = (
         select(Commit, Repo.full_name)
         .join(Repo, Commit.repo_id == Repo.id)
+        .where(Commit.profile_id == target.id)
         .order_by(Commit.authored_at.desc())
         .limit(limit)
     )
@@ -132,6 +195,7 @@ def get_commits(
         CommitOut(
             sha=commit.sha,
             repo=repo_name,
+            profile=target.username,
             message=commit.message.splitlines()[0] if commit.message else "",
             authored_at=commit.authored_at,
             skill=commit.skill,
@@ -151,6 +215,7 @@ def get_status(session: Session = Depends(get_session)):
 
     run = latest_run(session)
     return StatusOut(
+        total_profiles=count(Profile),
         total_repos=count(Repo),
         total_commits=count(Commit),
         tagged_commits=count(Commit, Commit.skill.is_not(None)),

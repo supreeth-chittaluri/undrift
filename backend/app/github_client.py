@@ -74,7 +74,8 @@ class GitHubClient:
         The token owner's repositories, most recently pushed first.
 
         Used when GITHUB_REPOS is empty, so the app discovers what to track
-        instead of relying on a hand-maintained list.
+        instead of relying on a hand-maintained list. Includes private repos,
+        because the token belongs to this user.
         """
         repos: List[Dict] = []
         page = 1
@@ -95,12 +96,50 @@ class GitHubClient:
             page += 1
         return repos[:limit]
 
-    def list_commits(self, full_name: str, author: str, days: int) -> List[Dict]:
+    def list_public_repos(self, username: str, limit: int) -> List[Dict]:
+        """
+        Someone else's PUBLIC repositories, most recently pushed first.
+
+        This is the endpoint used for sample profiles. It only ever returns
+        public data -- we cannot see another user's private repos, and
+        shouldn't -- so a sample profile's scores are built purely from
+        information that was already public.
+        """
+        repos: List[Dict] = []
+        page = 1
+        while len(repos) < limit:
+            resp = self._get(
+                f"/users/{username}/repos",
+                type="owner",
+                sort="pushed",
+                direction="desc",
+                per_page=100,
+                page=page,
+            )
+            if resp.status_code == 404:
+                raise GitHubError(f"GitHub user '{username}' does not exist.")
+            resp.raise_for_status()
+            batch = resp.json()
+            if not batch:
+                break
+            # Forks tend to carry thousands of other people's commits and tell
+            # us nothing about what this person actually works on.
+            repos.extend([r for r in batch if not r.get("fork")])
+            page += 1
+        return repos[:limit]
+
+    def list_commits(
+        self, full_name: str, author: str, days: int, limit: int = 40
+    ) -> List[Dict]:
         """
         Commits in `full_name` authored by `author` within the last `days`.
 
         Filtering by author server-side matters: on a repo you forked or
         collaborated on, we only want to credit skills to commits you wrote.
+
+        `limit` caps how many we take. Every new commit costs one Claude call
+        to classify, so an uncapped read of a prolific repo would be slow and
+        expensive for very little extra signal.
         """
         since = (utcnow() - timedelta(days=days)).isoformat() + "Z"
         commits: List[Dict] = []
@@ -122,10 +161,10 @@ class GitHubClient:
             if not batch:
                 break
             commits.extend(batch)
-            if len(batch) < 100:
+            if len(batch) < 100 or len(commits) >= limit:
                 break
             page += 1
-        return commits
+        return commits[:limit]
 
     def get_commit_detail(self, full_name: str, sha: str) -> Dict:
         """
