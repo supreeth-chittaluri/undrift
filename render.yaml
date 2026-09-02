@@ -7,6 +7,10 @@ services:
     name: undrift-api
     runtime: python
     plan: free
+    # Match the Neon database's region (us-east-2). Left unset, Render
+    # defaults to Oregon, which puts a cross-country round trip on every
+    # single query -- and one dashboard load makes several.
+    region: ohio
     buildCommand: "pip install -r backend/requirements.txt"
     startCommand: "uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT"
     # Render polls this to decide the service is up. It is the one route the
