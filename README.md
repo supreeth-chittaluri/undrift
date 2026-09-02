@@ -178,43 +178,67 @@ commits it already tagged.
 
 ## Deploying it privately
 
-The goal is that only I can reach it. The two halves are protected differently
-because they're different kinds of target.
+Three free accounts, roughly 20 minutes. Do them in this order — each step
+produces a value the next one needs.
 
-### Backend → Render
+### 1. Database — Neon
 
-1. New → Web Service → connect this repo. Render reads `render.yaml`.
-2. Create a free Postgres database ([Neon](https://neon.tech) or
-   [Supabase](https://supabase.com)) and copy its connection string. Both
-   `postgres://` and `postgresql://` URLs work — the app rewrites them to the
-   psycopg driver itself.
-3. Set the secrets Render prompts for: `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`,
-   `DATABASE_URL`, `APP_USERNAME`, `APP_PASSWORD`, and `ALLOWED_ORIGINS`
-   (your Vercel URL, once you have it).
+Create a project at [neon.tech](https://neon.tech) and copy the connection
+string. `postgres://` and `postgresql://` both work; the app rewrites either
+to the psycopg driver itself, so paste it unchanged.
 
-The backend is public on the internet but every route except `/health` sits
-behind HTTP Basic, enforced by middleware rather than per-route decorators —
-so a new endpoint is protected the moment it's added, instead of being
-silently public if the decorator is forgotten. It fails closed: with no
-credentials configured it returns 503 rather than serving openly.
+### 2. Backend — Render
 
-### Frontend → Vercel
+1. **New → Web Service**, connect this repo. Render reads `render.yaml`.
+2. Fill in the secrets it prompts for:
+   `DATABASE_URL` (from step 1), `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`,
+   `APP_USERNAME`, `APP_PASSWORD`, and `SAMPLE_PROFILES`.
+   Leave `ALLOWED_ORIGINS` blank for now — you get that value in step 3.
+3. Wait for the first deploy, then confirm it's alive:
+   `curl https://<your-service>.onrender.com/health`
 
-1. New Project → import this repo → set **Root Directory** to `frontend`.
-2. Set `VITE_API_URL` to the Render URL.
-3. Leave **Deployment Protection** on its default (Standard Protection). On
-   the free plan this restricts access to my own logged-in Vercel account,
-   which is what keeps the dashboard from being found by anyone else. No paid
-   password-protection add-on is needed.
+The first refresh classifies every ingested commit, so expect it to take a
+few minutes and cost a couple of dollars in Claude calls. Every run after
+that only touches genuinely new commits.
 
-Then add three repository secrets under **Settings → Secrets and variables →
-Actions** so the cron can authenticate: `UNDRIFT_API_URL`,
-`UNDRIFT_USERNAME`, `UNDRIFT_PASSWORD`.
+### 3. Frontend — Vercel
 
-Because Vercel's protection gates the dashboard to my own account, the plan is
-to show this to people via a screen recording rather than a live link.
+1. **Add New → Project**, import this repo, set **Root Directory** to
+   `frontend`.
+2. Add environment variable `VITE_API_URL` = your Render URL (no trailing
+   slash).
+3. Deploy. Vercel gives you a URL like `undrift.vercel.app`.
 
----
+### 4. Close the loop
+
+- Back on Render, set `ALLOWED_ORIGINS` to your exact Vercel URL and redeploy.
+  Without this the browser blocks every API call as a CORS violation.
+- In this repo: **Settings → Secrets and variables → Actions**, add
+  `UNDRIFT_API_URL`, `UNDRIFT_USERNAME`, `UNDRIFT_PASSWORD` so the cron can
+  authenticate. Trigger it once by hand from the **Actions** tab to prove it
+  works.
+
+### What "private" actually means here
+
+Be precise about this, because the plan limits matter:
+
+| Layer | Protection | Cost |
+|---|---|---|
+| Render API | HTTP Basic on every route except `/health` | free |
+| Vercel preview + deployment URLs | Vercel Authentication (your account only) | free |
+| Vercel **production** URL | **none** — publicly reachable | Pro ($20/mo) to protect |
+
+On Vercel's Hobby plan, Standard Protection deliberately leaves the
+production domain public; only Pro can protect it. So `undrift.vercel.app`
+can be opened by anyone who has the link — but all they see is a login form,
+because every piece of data comes from the Render API and that rejects
+unauthenticated requests. The dashboard also ships `noindex` and a
+`robots.txt` disallow, so it should not turn up in search results.
+
+If you want the production URL genuinely gated too, the options are: upgrade
+to Pro, or record your demo from a **deployment URL** (the immutable
+`undrift-<hash>.vercel.app` one), which Standard Protection does cover on the
+free plan.
 
 ## Security notes
 
