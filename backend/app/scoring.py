@@ -173,12 +173,17 @@ def backfill_history(session: Session, weeks: int = 26, step_days: int = 7) -> i
 
     Existing snapshots are left alone, so this is safe to re-run.
     """
-    now = utcnow()
+    # Anchor to midnight UTC, NOT to the current timestamp. The dedupe check
+    # below compares exact datetimes, so if the anchor moved by a few
+    # microseconds on every run -- which utcnow() does -- no generated date
+    # would ever match an existing row and each run would silently append a
+    # whole duplicate history. Snapping to midnight makes the dates stable.
+    anchor = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     existing = set(session.scalars(select(SkillScore.computed_at)).all())
 
     written = 0
     for week in range(weeks, 0, -1):
-        as_of = now - timedelta(days=week * step_days)
+        as_of = anchor - timedelta(days=week * step_days)
         if as_of in existing:
             continue
         for score in compute_scores(session, as_of=as_of):

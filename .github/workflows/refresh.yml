@@ -1,0 +1,56 @@
+# Automated ingestion, driven from outside the app.
+#
+# This is the mechanism that actually matters in production: Render's free
+# tier puts the service to sleep after inactivity, and a sleeping process
+# can't run its own APScheduler timer. This cron wakes it from the outside.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   UNDRIFT_API_URL  - e.g. https://undrift-api.onrender.com  (no trailing slash)
+#   UNDRIFT_USERNAME - same value as APP_USERNAME on the backend
+#   UNDRIFT_PASSWORD - same value as APP_PASSWORD on the backend
+
+name: Refresh Undrift
+
+on:
+  schedule:
+    # 06:00 and 18:00 UTC daily. GitHub's scheduler can lag by a few minutes
+    # under load, which is fine -- the pipeline is idempotent.
+    - cron: "0 6,18 * * *"
+  # Lets you trigger a run by hand from the Actions tab, which is handy
+  # for a demo video.
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger refresh
+        env:
+          API_URL: ${{ secrets.UNDRIFT_API_URL }}
+          USERNAME: ${{ secrets.UNDRIFT_USERNAME }}
+          PASSWORD: ${{ secrets.UNDRIFT_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          # Render cold starts can take ~60s, so allow a generous timeout and
+          # let curl retry rather than failing the run on a slow wake-up.
+          http_code=$(curl -sS -o response.json -w "%{http_code}" \
+            --retry 3 --retry-delay 20 --retry-all-errors \
+            --max-time 300 \
+            -u "$USERNAME:$PASSWORD" \
+            -X POST "$API_URL/api/refresh?trigger=cron")
+
+          echo "HTTP $http_code"
+          cat response.json
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Refresh failed with HTTP $http_code"
+            exit 1
+          fi
+
+          # The endpoint returns 200 even when the pipeline itself errored,
+          # so check the run status in the body too.
+          if grep -q '"status": *"error"' response.json; then
+            echo "::error::Pipeline reported an error"
+            exit 1
+          fi
