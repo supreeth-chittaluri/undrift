@@ -1,0 +1,180 @@
+"""
+Phase 5: the read API the dashboard talks to, plus the refresh trigger.
+
+Every route is under /api. Reads come straight out of the latest stored
+snapshot -- no scoring happens on the request path, so the dashboard loads
+fast and always shows the same numbers the scheduler computed.
+"""
+
+from datetime import timedelta
+from typing import Dict, List, Optional
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import distinct, func, select
+from sqlalchemy.orm import Session
+
+from .config import settings
+from .db import get_session, utcnow
+from .models import Commit, Repo, SkillScore, SyncRun
+from .pipeline import latest_run, run_refresh
+from .schemas import (
+    CommitOut,
+    HistoryPoint,
+    SkillHistoryOut,
+    SkillOut,
+    StatusOut,
+    SyncRunOut,
+)
+
+router = APIRouter(prefix="/api", tags=["undrift"])
+
+
+def _snapshot_timestamps(session: Session, limit: int = 2) -> List:
+    """The most recent distinct scoring-run timestamps, newest first."""
+    return list(
+        session.scalars(
+            select(distinct(SkillScore.computed_at))
+            .order_by(SkillScore.computed_at.desc())
+            .limit(limit)
+        )
+    )
+
+
+@router.get("/skills", response_model=List[SkillOut])
+def get_skills(session: Session = Depends(get_session)):
+    """
+    Current freshness for every skill, highest first.
+
+    `delta` compares each skill against the previous snapshot, which is what
+    tells you whether a skill is trending toward or away from staleness.
+    """
+    stamps = _snapshot_timestamps(session, limit=2)
+    if not stamps:
+        return []
+
+    current = session.scalars(
+        select(SkillScore).where(SkillScore.computed_at == stamps[0])
+    ).all()
+
+    previous: Dict[str, float] = {}
+    if len(stamps) > 1:
+        previous = {
+            row.skill: row.freshness
+            for row in session.scalars(
+                select(SkillScore).where(SkillScore.computed_at == stamps[1])
+            )
+        }
+
+    out = [
+        SkillOut(
+            skill=row.skill,
+            freshness=round(row.freshness, 2),
+            raw_weight=round(row.raw_weight, 4),
+            commit_count=row.commit_count,
+            last_commit_at=row.last_commit_at,
+            days_since_last=round(row.days_since_last, 1),
+            delta=(
+                round(row.freshness - previous[row.skill], 2)
+                if row.skill in previous
+                else None
+            ),
+        )
+        for row in current
+    ]
+    out.sort(key=lambda s: s.freshness, reverse=True)
+    return out
+
+
+@router.get("/skills/history", response_model=List[SkillHistoryOut])
+def get_history(
+    weeks: int = Query(26, ge=1, le=104),
+    session: Session = Depends(get_session),
+):
+    """Freshness over time per skill -- the data behind the trend chart."""
+    cutoff = utcnow() - timedelta(weeks=weeks)
+    rows = session.scalars(
+        select(SkillScore)
+        .where(SkillScore.computed_at >= cutoff)
+        .order_by(SkillScore.computed_at.asc())
+    ).all()
+
+    series: Dict[str, List[HistoryPoint]] = {}
+    for row in rows:
+        series.setdefault(row.skill, []).append(
+            HistoryPoint(date=row.computed_at, freshness=round(row.freshness, 2))
+        )
+
+    # Most-recently-fresh skills first, so the chart legend matches the bars.
+    return sorted(
+        [SkillHistoryOut(skill=k, points=v) for k, v in series.items()],
+        key=lambda s: s.points[-1].freshness,
+        reverse=True,
+    )
+
+
+@router.get("/commits", response_model=List[CommitOut])
+def get_commits(
+    limit: int = Query(50, ge=1, le=200),
+    skill: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    """Recent commits and how they were tagged -- the evidence behind a score."""
+    query = (
+        select(Commit, Repo.full_name)
+        .join(Repo, Commit.repo_id == Repo.id)
+        .order_by(Commit.authored_at.desc())
+        .limit(limit)
+    )
+    if skill:
+        query = query.where(Commit.skill == skill)
+
+    return [
+        CommitOut(
+            sha=commit.sha,
+            repo=repo_name,
+            message=commit.message.splitlines()[0] if commit.message else "",
+            authored_at=commit.authored_at,
+            skill=commit.skill,
+            skill_confidence=commit.skill_confidence,
+            tag_source=commit.tag_source,
+        )
+        for commit, repo_name in session.execute(query)
+    ]
+
+
+@router.get("/status", response_model=StatusOut)
+def get_status(session: Session = Depends(get_session)):
+    """Counts and last-run info, so the dashboard can show the data is live."""
+
+    def count(model, *where):
+        return session.scalar(select(func.count()).select_from(model).where(*where)) or 0
+
+    run = latest_run(session)
+    return StatusOut(
+        total_repos=count(Repo),
+        total_commits=count(Commit),
+        tagged_commits=count(Commit, Commit.skill.is_not(None)),
+        llm_tagged_commits=count(Commit, Commit.tag_source == "llm"),
+        distinct_skills=session.scalar(
+            select(func.count(distinct(Commit.skill))).where(Commit.skill.is_not(None))
+        )
+        or 0,
+        half_life_days=settings.decay_half_life_days,
+        last_run=SyncRunOut.model_validate(run, from_attributes=True) if run else None,
+    )
+
+
+@router.post("/refresh", response_model=SyncRunOut)
+def refresh(
+    trigger: str = Query("manual", pattern="^(manual|cron|scheduler)$"),
+    session: Session = Depends(get_session),
+):
+    """
+    Run the full pipeline now: ingest, tag, score.
+
+    This exists so the GitHub Actions cron has something to hit. It is not the
+    primary way data gets refreshed -- the scheduler and the cron are -- but a
+    manual trigger is useful when demoing.
+    """
+    run = run_refresh(session, trigger=trigger)
+    return SyncRunOut.model_validate(run, from_attributes=True)
