@@ -225,6 +225,11 @@ def get_status(session: Session = Depends(get_session)):
         )
         or 0,
         half_life_days=settings.decay_half_life_days,
+        scheduler_enabled=settings.enable_scheduler,
+        # Which profiles this instance will actually refresh. If a profile
+        # exists in the database but is missing here, its data is frozen --
+        # exactly the silent failure that SAMPLE_PROFILES being unset causes.
+        tracked_usernames=sorted(settings.sample_usernames),
         last_run=SyncRunOut.model_validate(run, from_attributes=True) if run else None,
     )
 

@@ -69,4 +69,8 @@ class StatusOut(BaseModel):
     llm_tagged_commits: int
     distinct_skills: int
     half_life_days: float
+    # Deployment config, echoed back so a misconfigured instance is
+    # diagnosable from the API instead of only from the host's dashboard.
+    scheduler_enabled: bool
+    tracked_usernames: List[str]
     last_run: Optional[SyncRunOut]
