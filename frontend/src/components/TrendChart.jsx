@@ -23,8 +23,8 @@ ChartJS.register(
 // deliberately avoid the fresh/fading/stale traffic-light colours that DO
 // carry meaning elsewhere in the UI.
 const COLORS = [
-  "#7c8cff", "#34d399", "#f472b6", "#fbbf24", "#22d3ee",
-  "#a78bfa", "#fb923c", "#f87171", "#8ea0c0", "#4ade80",
+  "#2f6b3f", "#8a5a2b", "#3b6ea5", "#b07d16", "#7a4a7d",
+  "#4a7c6f", "#b0432c", "#5f6d88", "#946c3a", "#2f6b8a",
 ];
 
 export default function TrendChart({ history }) {
@@ -49,7 +49,7 @@ export default function TrendChart({ history }) {
         // honest -- we're not pretending it scored zero before its first commit.
         data: labels.map((d) => (byDate.has(d) ? byDate.get(d) : null)),
         borderColor: COLORS[i % COLORS.length],
-        backgroundColor: `${COLORS[i % COLORS.length]}22`,
+        backgroundColor: `${COLORS[i % COLORS.length]}1a`,
         tension: 0.35,
         spanGaps: false,
         pointRadius: 0,
@@ -67,21 +67,21 @@ export default function TrendChart({ history }) {
     scales: {
       y: {
         min: 0, max: 100,
-        title: { display: true, text: "Freshness", color: "#5f6d88" },
-        ticks: { color: "#96a3bd", font: { size: 11 } },
-        grid: { color: "#1e2941" },
+        title: { display: true, text: "Freshness", color: "#9a9186" },
+        ticks: { color: "#6b6257", font: { size: 11 } },
+        grid: { color: "#e6dfd4" },
         border: { display: false },
       },
       x: {
-        ticks: { color: "#96a3bd", maxTicksLimit: 8, font: { size: 11 } },
+        ticks: { color: "#6b6257", maxTicksLimit: 8, font: { size: 11 } },
         grid: { display: false },
-        border: { color: "#1e2941" },
+        border: { color: "#e6dfd4" },
       },
     },
     plugins: {
       legend: {
         labels: {
-          color: "#96a3bd",
+          color: "#6b6257",
           boxWidth: 8,
           usePointStyle: true,
           pointStyle: "circle",
@@ -90,11 +90,11 @@ export default function TrendChart({ history }) {
         },
       },
       tooltip: {
-        backgroundColor: "#111828",
-        borderColor: "#2b3a5c",
+        backgroundColor: "#ffffff",
+        borderColor: "#d5cbbc",
         borderWidth: 1,
-        titleColor: "#e8edf7",
-        bodyColor: "#96a3bd",
+        titleColor: "#1f1a14",
+        bodyColor: "#6b6257",
         padding: 10,
         cornerRadius: 8,
         displayColors: true,

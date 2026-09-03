@@ -7,7 +7,7 @@
 
 import DecayExplainer from "./DecayExplainer";
 
-export default function Landing({ status, children, onTrack }) {
+export default function Landing({ status, children, onAudit }) {
   const commits = status?.total_commits;
   const skills = status?.distinct_skills;
 
@@ -34,10 +34,12 @@ export default function Landing({ status, children, onTrack }) {
         </p>
 
         <div className="hero-actions">
-          <button onClick={onTrack}>Track your GitHub</button>
           <a href="#live">
-            <button className="ghost">See it on real data ↓</button>
+            <button>See it on real data</button>
           </a>
+          <button className="ghost" onClick={onAudit}>
+            Audit a skills list
+          </button>
         </div>
       </header>
 
@@ -55,9 +57,10 @@ export default function Landing({ status, children, onTrack }) {
             <div className="step-num">2</div>
             <h3>Claude labels each one</h3>
             <p>
-              One skill per commit, chosen from a fixed vocabulary of{" "}
-              {skills ? `${skills} seen so far` : "32"}. The model picks the
-              label and explains why — it never decides what&rsquo;s stale.
+              One skill per commit, chosen from a fixed vocabulary of 32
+              {skills ? ` — ${skills} of them seen so far` : ""}. The model
+              picks the label and explains why; it never decides what&rsquo;s
+              stale.
             </p>
           </div>
           <div className="step">

@@ -64,8 +64,10 @@ confidence for each one.
 
 <img src="docs/img/evidence.png" alt="The evidence drawer, showing commits with the classifier's reasoning" width="820">
 
-Every score is auditable down to individual commits. Each open skill has its own
-URL, so "here's why I can claim Python" is a link you can send someone.
+Every score is auditable down to individual commits, and each card carries a
+sparkline of its last six months — 58 on the way up and 58 on the way down are
+the same number and opposite situations. Each open skill has its own URL, so
+"here's why I can claim Python" is a link you can send someone.
 
 ## Does your résumé survive contact with your commits?
 
@@ -475,5 +477,5 @@ frontend/src/
   App.jsx           landing page, dashboard, and which one you get
   api.js            every backend call, in one place
   skills.js         band thresholds, shared by the cards and the tiles
-  components/       Landing, SkillCard, Audit, DecayExplainer, TrendChart, …
+  components/       Landing, SkillCard, Sparkline, Audit, DecayExplainer, …
 ```
