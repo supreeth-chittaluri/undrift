@@ -4,7 +4,7 @@ contract it can rely on, and FastAPI documents them at /docs for free."""
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProfileOut(BaseModel):
@@ -72,6 +72,37 @@ class SyncRunOut(BaseModel):
     skills_scored: int
     status: str
     error: Optional[str]
+
+
+class AuditRequest(BaseModel):
+    """A résumé skills line, or a whole job description, plus who to check."""
+
+    text: str = Field(min_length=2, max_length=8000)
+    profile: Optional[str] = None
+
+
+class AuditFinding(BaseModel):
+    claimed: str
+    skill: str
+    # strong | moderate | weak | none | untracked. "untracked" is a statement
+    # about Undrift's coverage, not about the person -- see audit.py.
+    evidence: str
+    status: Optional[str]
+    freshness: Optional[float]
+    depth: Optional[float]
+    commit_count: Optional[int]
+    repo_count: Optional[int]
+    days_since_last: Optional[float]
+    note: str
+
+
+class AuditResponse(BaseModel):
+    profile: str
+    findings: List[AuditFinding]
+    # Share of claimed, TRACKED skills backed by real and not-yet-stale
+    # evidence. None when nothing could be scored.
+    match_percentage: Optional[int]
+    detail: Optional[str] = None
 
 
 class SessionOut(BaseModel):

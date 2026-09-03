@@ -74,5 +74,14 @@ export const getCommits = (profile, skill, limit = 8) => {
   if (skill) params.set("skill", skill);
   return request(`/api/commits?${params}`);
 };
+// Check claimed skills against a profile's evidence. The only POST a visitor
+// can make without signing in, and the only call that costs money per use --
+// the backend rate limits it per caller.
+export const runAudit = (text, profile) =>
+  request("/api/audit", {
+    method: "POST",
+    body: JSON.stringify({ text, profile: profile || null }),
+  });
+
 export const triggerRefresh = () =>
   request("/api/refresh?trigger=manual", { method: "POST" });

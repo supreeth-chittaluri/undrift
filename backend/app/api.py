@@ -6,6 +6,7 @@ snapshot -- no scoring happens on the request path, so the dashboard loads
 fast and always shows the same numbers the scheduler computed.
 """
 
+import time
 from datetime import timedelta
 from typing import Dict, List, Optional
 
@@ -14,6 +15,7 @@ from fastapi.responses import Response
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
+from .audit import MAX_INPUT_CHARS, assess, extract_claims, match_percentage
 from .auth import is_authenticated
 from .card import render_card
 from .config import settings
@@ -22,6 +24,8 @@ from .models import Commit, Profile, Repo, SkillScore, SyncRun
 from .pipeline import latest_run, run_refresh
 from .scoring import FADING_THRESHOLD, FRESH_THRESHOLD, days_until_freshness
 from .schemas import (
+    AuditRequest,
+    AuditResponse,
     CommitOut,
     ProfileOut,
     HistoryPoint,
@@ -383,6 +387,105 @@ def get_status(
         # exactly the silent failure that SAMPLE_PROFILES being unset causes.
         tracked_usernames=sorted(settings.sample_usernames),
         last_run=last_run,
+    )
+
+
+# --- rate limiting ----------------------------------------------------------
+#
+# One endpoint here spends money on behalf of whoever calls it, and it is
+# reachable without credentials. This is a deliberately small in-process
+# limiter: a dict of caller -> recent timestamps, no Redis, no dependency.
+#
+# Its limitation is worth stating rather than hiding. It is per-process, so it
+# resets on deploy and would not hold across replicas. That is adequate here
+# because the deployment is a single free-tier instance and because the real
+# spend ceiling is MAX_COMMITS_PER_TAG_RUN, which this cannot bypass -- the
+# limiter exists to stop casual hammering, not a determined attacker.
+_AUDIT_CALLS: Dict[str, List[float]] = {}
+AUDIT_RATE_LIMIT = 6
+AUDIT_RATE_WINDOW = 300.0
+
+
+def _caller_key(request: Request) -> str:
+    """
+    Identify the caller for rate limiting.
+
+    On Render every request arrives from the platform's proxy, so
+    `request.client.host` is the same address for everyone -- rate limiting on
+    it would put the entire internet in one bucket and lock out the second
+    visitor. The real client is the first entry in X-Forwarded-For.
+
+    That header is client-controllable, so this is not an identity: someone
+    determined can rotate it and get a fresh allowance. It is the correct
+    trade anyway. The failure this guards against is casual repeated clicking,
+    and the alternative -- ignoring the header -- fails much worse, by
+    throttling real users who share a proxy.
+    """
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:64]
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limit(request: Request) -> None:
+    """Allow AUDIT_RATE_LIMIT calls per caller per AUDIT_RATE_WINDOW seconds."""
+    caller = _caller_key(request)
+    now = time.monotonic()
+
+    recent = [t for t in _AUDIT_CALLS.get(caller, []) if now - t < AUDIT_RATE_WINDOW]
+    if len(recent) >= AUDIT_RATE_LIMIT:
+        retry = int(AUDIT_RATE_WINDOW - (now - recent[0])) + 1
+        raise HTTPException(
+            429,
+            "That's a lot of audits. Try again shortly.",
+            headers={"Retry-After": str(retry)},
+        )
+
+    recent.append(now)
+    _AUDIT_CALLS[caller] = recent
+    # Drop callers who have gone quiet, so the dict cannot grow without bound
+    # on a long-lived process.
+    if len(_AUDIT_CALLS) > 512:
+        for key in [k for k, v in _AUDIT_CALLS.items() if not v or now - v[-1] > AUDIT_RATE_WINDOW]:
+            _AUDIT_CALLS.pop(key, None)
+
+
+@router.post("/audit", response_model=AuditResponse)
+def audit_skills(
+    body: AuditRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+    caller_authed: bool = Depends(authed),
+):
+    """
+    Check claimed skills against the evidence in a profile's commit history.
+
+    Takes the skills line off a résumé or a whole job description. The LLM only
+    maps phrases onto the fixed vocabulary; every verdict after that is the
+    same deterministic scoring the dashboard uses.
+    """
+    if not caller_authed:
+        _rate_limit(request)
+
+    target = resolve_profile(session, body.profile, caller_authed)
+    claims = extract_claims(body.text)
+    if not claims:
+        return AuditResponse(
+            profile=target.username,
+            findings=[],
+            match_percentage=None,
+            detail=(
+                "No technical skills were recognised in that text. Paste a "
+                "skills list or a job description."
+            ),
+        )
+
+    findings = assess(session, target, claims)
+    return AuditResponse(
+        profile=target.username,
+        findings=findings,
+        match_percentage=match_percentage(findings),
+        detail=None,
     )
 
 

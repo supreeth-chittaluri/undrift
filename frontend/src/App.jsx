@@ -9,6 +9,7 @@ import {
   triggerRefresh,
 } from "./api";
 import { clearCredentials, getCredentials } from "./auth";
+import Audit from "./components/Audit";
 import Landing from "./components/Landing";
 import Login from "./components/Login";
 import ProfileSwitcher from "./components/ProfileSwitcher";
@@ -23,6 +24,7 @@ import TrendChart from "./components/TrendChart";
 //   landing  anonymous. The marketing page, with a real dashboard embedded in
 //            it reading the public sample profiles.
 //   app      signed in. The same dashboard, defaulting to the owner's data.
+//   audit    the resume auditor, run against whichever profile is selected.
 //   track    the create-your-own-profile flow, reachable from either.
 //
 // The API decides what an anonymous caller may see, not this component. The
@@ -30,7 +32,7 @@ import TrendChart from "./components/TrendChart";
 // list of "private" profiles it is supposed to hide, because a check that
 // lives only in the browser is not a check at all.
 
-function Nav({ authed, onSignOut, onSignIn, onTrack, onHome }) {
+function Nav({ authed, onSignOut, onSignIn, onTrack, onAudit, onHome }) {
   return (
     <nav className="nav">
       <div className="nav-inner">
@@ -39,6 +41,9 @@ function Nav({ authed, onSignOut, onSignIn, onTrack, onHome }) {
           Undrift
         </a>
         <div className="nav-actions">
+          <button className="ghost" onClick={onAudit}>
+            Audit a résumé
+          </button>
           <button className="ghost nav-track" onClick={onTrack}>
             Track your GitHub
           </button>
@@ -72,7 +77,9 @@ export default function App() {
   // "landing" | "track" | "login". The dashboard is not a view of its own --
   // it renders inside the landing page when anonymous, and on its own when
   // signed in.
-  const [view, setView] = useState("landing");
+  const [view, setView] = useState(() =>
+    new URLSearchParams(window.location.search).has("audit") ? "audit" : "landing",
+  );
 
   const [profiles, setProfiles] = useState([]);
   // null means "whichever profile the API considers the default" -- we don't
@@ -210,7 +217,9 @@ export default function App() {
   );
 
   let body;
-  if (view === "track") {
+  if (view === "audit") {
+    body = <Audit profile={selected} profileLabel={selected} />;
+  } else if (view === "track") {
     body = <TrackYourself onCancel={() => setView("landing")} />;
   } else if (view === "login") {
     body = (
@@ -247,6 +256,7 @@ export default function App() {
         onSignOut={handleSignOut}
         onSignIn={() => setView("login")}
         onTrack={() => setView("track")}
+        onAudit={() => setView("audit")}
         onHome={(e) => {
           e.preventDefault();
           setView("landing");
