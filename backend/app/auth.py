@@ -50,6 +50,9 @@ PUBLIC_READ_PATHS = {
     "/api/skills/history",
     "/api/commits",
     "/api/status",
+    # The README's hero image. It has to be anonymous: GitHub fetches it
+    # through camo, which never carries credentials.
+    "/api/card.svg",
 }
 
 UNAUTHORIZED_HEADERS = {"WWW-Authenticate": 'Basic realm="Undrift"'}

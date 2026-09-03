@@ -146,8 +146,18 @@ function Evidence({ skill, profile }) {
   );
 }
 
+// The open card is reflected in the URL hash, so a link can point straight at
+// one skill's evidence. That is the shareable artefact this whole feature is
+// for: "here is why I can claim FastAPI" is a link, not a screenshot.
+const hashFor = (name) => `#skill=${encodeURIComponent(name)}`;
+
+function hashMatches(name) {
+  if (typeof window === "undefined") return false;
+  return window.location.hash === hashFor(name);
+}
+
 export default function SkillCard({ skill, profile }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => hashMatches(skill.skill));
   // Start the bar at zero so it animates outward on mount. Without this the
   // width is correct on first paint and the transition never runs.
   const [mounted, setMounted] = useState(false);
@@ -162,7 +172,15 @@ export default function SkillCard({ skill, profile }) {
     <li className={`skill ${state}${open ? " open" : ""}`}>
       <button
         className="skill-main"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((wasOpen) => {
+            // Replace rather than push, so opening five cards in a row
+            // doesn't bury the back button under five history entries.
+            const next = wasOpen ? " " : hashFor(skill.skill);
+            window.history.replaceState(null, "", next);
+            return !wasOpen;
+          });
+        }}
         aria-expanded={open}
       >
         <div className="skill-head">
