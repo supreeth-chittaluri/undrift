@@ -10,10 +10,12 @@ from datetime import timedelta
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from .auth import is_authenticated
+from .card import render_card
 from .config import settings
 from .db import get_session, utcnow
 from .models import Commit, Profile, Repo, SkillScore, SyncRun
@@ -253,6 +255,72 @@ def get_commits(
         )
         for commit, repo_name in session.execute(query)
     ]
+
+
+@router.get("/card.svg", include_in_schema=False)
+def get_card(
+    profile: Optional[str] = None,
+    skills: int = Query(6, ge=1, le=12),
+    session: Session = Depends(get_session),
+    caller_authed: bool = Depends(authed),
+):
+    """
+    An embeddable SVG of one profile's top skills, for the README.
+
+    A screenshot in a README is stale the day after it is taken. This is the
+    same numbers the dashboard shows, rendered server-side on request, so the
+    repository's front page is always showing the last sync's real output.
+
+    Cached for an hour. GitHub proxies images through camo and will hammer
+    this on every page view otherwise, and the underlying data only changes
+    when the cron runs twice a day.
+    """
+    target = resolve_profile(session, profile, caller_authed)
+    stamps = _snapshot_timestamps(session, target.id, limit=1)
+
+    rows = []
+    if stamps:
+        rows = list(
+            session.scalars(
+                select(SkillScore)
+                .where(
+                    SkillScore.profile_id == target.id,
+                    SkillScore.computed_at == stamps[0],
+                )
+                .order_by(SkillScore.freshness.desc())
+                .limit(skills)
+            )
+        )
+
+    total = (
+        session.scalar(
+            select(func.count()).select_from(Commit).where(Commit.profile_id == target.id)
+        )
+        or 0
+    )
+
+    run = latest_run(session)
+    synced = None
+    if run and run.started_at:
+        hours = (utcnow() - run.started_at).total_seconds() / 3600
+        if hours < 1:
+            synced = "just now"
+        elif hours < 24:
+            synced = f"{int(hours)}h ago"
+        else:
+            synced = f"{int(hours // 24)}d ago"
+
+    svg = render_card(
+        username=target.username,
+        skills=[{"skill": r.skill, "freshness": r.freshness} for r in rows],
+        total_commits=total,
+        synced_label=synced,
+    )
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/session", response_model=SessionOut)
