@@ -26,16 +26,21 @@
   --border-strong: #d5cbbc;
 
   /* Text. Warm near-black, never #000: pure black on warm paper looks like a
-     different design system leaked in. */
+     different design system leaked in.
+
+     Every one of these clears 4.5:1 against --bg, checked rather than eyeballed.
+     --text-faint carries real content -- axis labels, SHAs, confidence -- so it
+     does not get to be decorative-grade. */
   --text: #1f1a14;
   --text-dim: #6b6257;
-  --text-faint: #9a9186;
+  --text-faint: #766c5e;
 
   /* The three that mean something. Earthy rather than neon -- these sit on
-     paper, not on a terminal. */
+     paper, not on a terminal. All three clear 4.5:1 against --bg, because they
+     are rendered as small text (scores, chips) and not only as bars. */
   --fresh: #2f6b3f;
   --fresh-soft: #e6f0e6;
-  --fading: #b07d16;
+  --fading: #8a6212;
   --fading-soft: #f8eed7;
   --stale: #b0432c;
   --stale-soft: #f8e6e1;
