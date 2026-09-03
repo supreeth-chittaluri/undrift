@@ -23,10 +23,10 @@ BG = "#ffffff"
 BORDER = "#e6dfd4"
 TEXT = "#1f1a14"
 TEXT_DIM = "#6b6257"
-TEXT_FAINT = "#9a9186"
+TEXT_FAINT = "#766c5e"
 TRACK = "#f3efe8"
 FRESH = "#2f6b3f"
-FADING = "#b07d16"
+FADING = "#8a6212"
 STALE = "#b0432c"
 
 # Figtree is not available inside a GitHub-proxied SVG, so this asks for the
