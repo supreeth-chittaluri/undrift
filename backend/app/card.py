@@ -19,16 +19,19 @@ from .scoring import FADING_THRESHOLD, FRESH_THRESHOLD
 
 # Matched to the dashboard's tokens in index.css, deliberately duplicated:
 # the card has to be a single self-contained file, so it cannot read them.
-BG = "#0d1220"
-BORDER = "#1e2941"
-TEXT = "#e8edf7"
-TEXT_DIM = "#96a3bd"
-TEXT_FAINT = "#5f6d88"
-TRACK = "#161f33"
-FRESH = "#34d399"
-FADING = "#fbbf24"
-STALE = "#f87171"
+BG = "#ffffff"
+BORDER = "#e6dfd4"
+TEXT = "#1f1a14"
+TEXT_DIM = "#6b6257"
+TEXT_FAINT = "#9a9186"
+TRACK = "#f3efe8"
+FRESH = "#2f6b3f"
+FADING = "#b07d16"
+STALE = "#b0432c"
 
+# Figtree is not available inside a GitHub-proxied SVG, so this asks for the
+# reader's own UI font and lands close enough. Naming a webfont here would
+# just fail silently and fall back to Times.
 FONT = (
     "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
 )

@@ -16,7 +16,6 @@ import ProfileSwitcher from "./components/ProfileSwitcher";
 import SkillBars from "./components/SkillBars";
 import StatusBar from "./components/StatusBar";
 import SummaryTiles from "./components/SummaryTiles";
-import TrackYourself from "./components/TrackYourself";
 import TrendChart from "./components/TrendChart";
 
 // Three views, and which one you get depends on whether you signed in:
@@ -25,27 +24,25 @@ import TrendChart from "./components/TrendChart";
 //            it reading the public sample profiles.
 //   app      signed in. The same dashboard, defaulting to the owner's data.
 //   audit    the resume auditor, run against whichever profile is selected.
-//   track    the create-your-own-profile flow, reachable from either.
 //
 // The API decides what an anonymous caller may see, not this component. The
 // frontend asks for data and renders whatever comes back; it never holds a
 // list of "private" profiles it is supposed to hide, because a check that
 // lives only in the browser is not a check at all.
 
-function Nav({ authed, onSignOut, onSignIn, onTrack, onAudit, onHome }) {
+function Nav({ authed, onSignOut, onSignIn, onAudit, onHome }) {
   return (
     <nav className="nav">
       <div className="nav-inner">
         <a className="wordmark" href="#" onClick={onHome}>
-          <span className="mark" />
+          <span className="mark" aria-hidden="true">
+            <i /><i /><i />
+          </span>
           Undrift
         </a>
         <div className="nav-actions">
           <button className="ghost" onClick={onAudit}>
             Audit a résumé
-          </button>
-          <button className="ghost nav-track" onClick={onTrack}>
-            Track your GitHub
           </button>
           {authed ? (
             <button className="ghost" onClick={onSignOut}>
@@ -201,7 +198,7 @@ export default function App() {
         <>
           <SummaryTiles skills={skills} />
 
-          <SkillBars skills={skills} profile={selected} />
+          <SkillBars skills={skills} profile={selected} history={history} />
 
           <div style={{ marginTop: "2.5rem" }}>
             <h2 className="section-title">Drift over time</h2>
@@ -219,8 +216,6 @@ export default function App() {
   let body;
   if (view === "audit") {
     body = <Audit profile={selected} profileLabel={selected} />;
-  } else if (view === "track") {
-    body = <TrackYourself onCancel={() => setView("landing")} />;
   } else if (view === "login") {
     body = (
       <Login onSuccess={handleSignedIn} onCancel={() => setView("landing")} />
@@ -243,7 +238,7 @@ export default function App() {
     );
   } else {
     body = (
-      <Landing status={status} onTrack={() => setView("track")}>
+      <Landing status={status} onAudit={() => setView("audit")}>
         {dashboard}
       </Landing>
     );
@@ -255,7 +250,6 @@ export default function App() {
         authed={authed}
         onSignOut={handleSignOut}
         onSignIn={() => setView("login")}
-        onTrack={() => setView("track")}
         onAudit={() => setView("audit")}
         onHome={(e) => {
           e.preventDefault();

@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { getCommits } from "../api";
 import { band } from "../skills";
+import Sparkline from "./Sparkline";
 
 function Delta({ value }) {
   if (value === null || value === undefined) return null;
@@ -156,16 +157,8 @@ function hashMatches(name) {
   return window.location.hash === hashFor(name);
 }
 
-export default function SkillCard({ skill, profile }) {
+export default function SkillCard({ skill, profile, history }) {
   const [open, setOpen] = useState(() => hashMatches(skill.skill));
-  // Start the bar at zero so it animates outward on mount. Without this the
-  // width is correct on first paint and the transition never runs.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-
   const state = band(skill.freshness);
 
   return (
@@ -188,13 +181,21 @@ export default function SkillCard({ skill, profile }) {
             <span className="chevron">▶</span>
             {skill.skill}
           </span>
-          <span className="skill-score">{skill.freshness.toFixed(1)}</span>
+          <span className="skill-right">
+            <Sparkline points={history} />
+            <span className="skill-score">{skill.freshness.toFixed(1)}</span>
+          </span>
         </div>
 
         <div className="bar-track">
+          {/* The width is final from the first paint; the grow-in is a pure
+              CSS scaleX. Driving it from a requestAnimationFrame instead
+              meant the bar stayed empty wherever rAF is throttled -- a
+              background tab, a headless capture, a device in low-power mode
+              -- which is a decorative effect breaking the actual data. */}
           <div
             className="bar-fill"
-            style={{ width: mounted ? `${Math.max(skill.freshness, 1)}%` : "0%" }}
+            style={{ width: `${Math.max(skill.freshness, 1)}%` }}
           />
         </div>
 
