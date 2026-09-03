@@ -55,6 +55,13 @@ PUBLIC_READ_PATHS = {
     "/api/card.svg",
 }
 
+# Anonymous POSTs, which the GET-only rule above would otherwise refuse. The
+# audit endpoint has to be one: it is the feature a visitor comes to try, and
+# it takes pasted text, which cannot travel in a query string. It costs money
+# per call, so it is rate limited in the handler -- a route that spends is
+# allowed here only because something else is counting.
+PUBLIC_WRITE_PATHS = {"/api/audit"}
+
 UNAUTHORIZED_HEADERS = {"WWW-Authenticate": 'Basic realm="Undrift"'}
 
 
@@ -115,12 +122,10 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         if credentials_ok:
             return await call_next(request)
 
-        # Anonymous from here down. The public demo surface is GET-only: a
-        # write is never anonymous, whatever path it targets.
-        if (
-            settings.public_demo
-            and request.method == "GET"
-            and request.url.path in PUBLIC_READ_PATHS
+        # Anonymous from here down.
+        if settings.public_demo and (
+            (request.method == "GET" and request.url.path in PUBLIC_READ_PATHS)
+            or (request.method == "POST" and request.url.path in PUBLIC_WRITE_PATHS)
         ):
             return await call_next(request)
 

@@ -650,3 +650,74 @@ footer .shell { display: flex; justify-content: space-between; gap: 1rem; flex-w
 }
 
 section.block { margin: 3.5rem 0; }
+
+/* --- résumé auditor ----------------------------------------------------- */
+
+.audit-input {
+  width: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  padding: 0.9rem 1rem;
+  resize: vertical;
+}
+.audit-input:focus { outline: none; border-color: var(--accent); }
+.audit-input::placeholder { color: var(--text-faint); }
+
+.audit-actions { display: flex; gap: 0.6rem; margin-top: 0.8rem; flex-wrap: wrap; }
+
+.finding-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+
+.finding {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-bright);
+  border-radius: var(--radius);
+  padding: 0.9rem 1.1rem;
+}
+/* The left edge carries the verdict, so the shape of the list is readable
+   before any of it is read. */
+.finding.strong   { border-left-color: var(--fresh); }
+.finding.moderate { border-left-color: var(--fading); }
+.finding.weak     { border-left-color: var(--fading); }
+.finding.none     { border-left-color: var(--stale); }
+/* Untracked is deliberately colourless. It is not a good result or a bad one
+   -- it is the absence of a result, and giving it a traffic-light colour
+   would imply a judgement the data cannot support. */
+.finding.untracked { border-left-color: var(--border-bright); opacity: 0.72; }
+
+.finding-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.finding-name { font-weight: 600; font-size: 0.95rem; }
+.finding-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  border: 1px solid currentColor;
+}
+.ev-strong    { color: var(--fresh); }
+.ev-moderate  { color: var(--fading); }
+.ev-weak      { color: var(--fading); opacity: 0.85; }
+.ev-none      { color: var(--stale); }
+.ev-untracked { color: var(--text-faint); }
+.status-fresh    { color: var(--fresh); }
+.status-drifting { color: var(--fading); }
+.status-stale    { color: var(--stale); }
+
+.finding-mapped { font-size: 0.72rem; color: var(--text-faint); margin-top: 0.25rem; }
+.finding-mapped code { color: var(--text-dim); }
+.finding-note { font-size: 0.83rem; color: var(--text-dim); margin: 0.45rem 0 0; }
+.finding .axes { margin-top: 0.6rem; }

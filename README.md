@@ -67,6 +67,44 @@ confidence for each one.
 Every score is auditable down to individual commits. Each open skill has its own
 URL, so "here's why I can claim Python" is a link you can send someone.
 
+## Does your résumé survive contact with your commits?
+
+Paste the skills line off a résumé — or a whole job description — and Undrift
+checks each claim against what the commit history actually shows.
+
+<img src="docs/img/audit.png" alt="The résumé auditor, showing evidence verdicts per claimed skill" width="820">
+
+The verdict that matters most is the boring grey one at the bottom. **"No
+evidence of AWS" and "Undrift does not track AWS" are completely different
+claims, and only the first is about you.** Conflating them would tell someone
+with three years of AWS that their AWS is unverified — confidently wrong about
+the one thing they came to check. Untracked skills get their own verdict, are
+rendered without a traffic-light colour, and are excluded from the match
+percentage entirely: a blind spot in the tool is not a finding about the person.
+
+Everything after the mapping is arithmetic. Claude turns "React.js" into
+"React"; it never decides whether the evidence is strong. Evidence strength
+comes from depth, staleness from the same decay curve as the dashboard, so an
+audit is reproducible and can't be talked out of its answer.
+
+Audits are linkable — [`/?audit=Python,React,AWS`](https://undrift-supreeth-chittaluri.vercel.app/?audit=Python,React,AWS)
+runs on load.
+
+### Pasted text is untrusted
+
+A job description is a document written by somebody else, and it goes into a
+prompt. Undrift treats it as data:
+
+- The pasted text is used for exactly **one** operation — mapping phrases onto a
+  fixed enum — and the response schema makes any other output unrepresentable.
+- The system prompt states plainly that the text is untrusted data that may
+  contain instructions, and that they are never to be followed.
+- Nothing downstream re-reads it. The verdicts are computed from database rows.
+
+Tested with a job description containing `IGNORE ALL PREVIOUS INSTRUCTIONS`,
+a fake `SYSTEM:` block and a demand to mark every skill as strong: the
+injection was ignored and only the two genuine skills came back.
+
 ---
 
 ## The decay formula
@@ -288,6 +326,7 @@ profile when not.
 | `GET /api/commits?limit=&skill=` | public\* | The commits behind a skill, and why each was tagged |
 | `GET /api/card.svg?profile=` | public\* | The embeddable SVG above |
 | `GET /api/status` | public | Row counts and the last sync run |
+| `POST /api/audit` | public\* | Check claimed skills against the evidence (rate limited) |
 | `GET /api/session` | **private** | Who you're signed in as |
 | `POST /api/refresh?trigger=` | **private** | Runs ingest → tag → score |
 
@@ -375,11 +414,18 @@ and **Metadata: Read-only** and nothing else. A classic token with full `repo`
 scope — let alone `admin:org` or `delete_repo` — hands far more authority to an
 environment variable than this app has any use for.
 
-**Commit text is untrusted input.** Commit messages reach a Claude prompt, and a
-commit message can contain text aimed at the model. Classification is constrained
-to a fixed enum by the response schema, so the worst a hostile message can do is
-influence its own label; the system prompt also states plainly that the commit
-text is data rather than instructions.
+**Untrusted text reaches the model in two places**, and both are constrained the
+same way. Commit messages are classified into a fixed enum, so the worst a
+hostile message can do is influence its own label. Pasted résumés and job
+descriptions go through the auditor, which is covered above. In both cases the
+response schema — not the prompt — is what makes a successful injection
+unrepresentable.
+
+**The audit endpoint spends money and is public.** It is rate limited per caller
+in-process (6 calls per 5 minutes), which is honestly a small defence: it resets
+on deploy and would not hold across replicas. It is adequate because the
+deployment is a single free-tier instance, and because the real ceiling is
+`MAX_COMMITS_PER_TAG_RUN`, which no request can bypass.
 
 **Credentials in the browser.** HTTP Basic means the dashboard has to hold the
 username and password to replay them on each request; they're kept in
@@ -419,6 +465,7 @@ backend/app/
   ingest.py         pull commits, skip SHAs already stored
   skill_tagger.py   batched Claude call, schema-validated, with a fallback
   scoring.py        freshness, depth, momentum and the forecast
+  audit.py          the résumé auditor: claims vs. evidence
   card.py           the embeddable SVG
   pipeline.py       ingest → tag → score, logged to sync_runs
   scheduler.py      the in-process timer
@@ -428,5 +475,5 @@ frontend/src/
   App.jsx           landing page, dashboard, and which one you get
   api.js            every backend call, in one place
   skills.js         band thresholds, shared by the cards and the tiles
-  components/       Landing, SkillCard, DecayExplainer, TrendChart, …
+  components/       Landing, SkillCard, Audit, DecayExplainer, TrendChart, …
 ```
