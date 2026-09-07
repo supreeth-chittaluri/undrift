@@ -5,7 +5,7 @@
 ### Your skills are decaying right now. This shows you which ones.
 
 Undrift reads your real commit history, asks Claude which skill each commit
-exercised, and scores every one of them on a decay curve — so the fading is
+exercised, and scores every one of them on a decay curve, so the fading is
 something you can **see** instead of something you find out in an interview.
 
 [**Open the live dashboard →**](https://undrift-supreeth-chittaluri.vercel.app)
@@ -25,7 +25,7 @@ and none of them have a date. "Python, React, AWS, Docker, SQL" says nothing
 about whether you touched any of it this year.
 
 Meanwhile the actual decay is invisible while it happens. You don't notice
-Docker going stale — you notice it in an interview, eight months later.
+Docker going stale; you notice it in an interview, eight months later.
 
 Undrift makes both things visible, from data you're already generating.
 
@@ -35,8 +35,8 @@ Undrift makes both things visible, from data you're already generating.
 
 Freshness alone can't tell these two people apart:
 
-- **A** — wrote Java daily for three years, then stopped eight months ago.
-- **B** — touched Java twice, last week, and never otherwise.
+- **A** wrote Java daily for three years, then stopped eight months ago.
+- **B** touched Java twice, last week, and never otherwise.
 
 Both land at roughly the same score, and the honest advice is opposite: A has a
 real skill going stale and worth reviving; B never had one. So every skill
@@ -48,8 +48,8 @@ carries three numbers that answer different questions.
 | **Depth** | How much evidence is there that you know it at all? | Never decays |
 | **Momentum** | Are you using it more or less than before? | Signed, −100…+100 |
 
-Person A reads *low freshness, high depth, negative momentum* — you're losing
-something you paid for. Person B reads *low freshness, low depth* — you never
+Person A reads *low freshness, high depth, negative momentum*: you're losing
+something you paid for. Person B reads *low freshness, low depth*: you never
 had this. Same freshness, opposite story.
 
 Undrift also **forecasts**: because the decay curve is invertible, it can tell
@@ -59,19 +59,19 @@ not a simulation.
 ## Why do you think I know FastAPI?
 
 This is the part most skill trackers can't answer. Click any skill and Undrift
-opens the commits behind the number — with the classifier's own reasoning and
+opens the commits behind the number, with the classifier's own reasoning and
 confidence for each one.
 
 <img src="docs/img/evidence.png" alt="The evidence drawer, showing commits with the classifier's reasoning" width="820">
 
 Every score is auditable down to individual commits, and each card carries a
-sparkline of its last six months — 58 on the way up and 58 on the way down are
+sparkline of its last six months: 58 on the way up and 58 on the way down are
 the same number and opposite situations. Each open skill has its own URL, so
 "here's why I can claim Python" is a link you can send someone.
 
 ## Does your résumé survive contact with your commits?
 
-Paste the skills line off a résumé — or a whole job description — and Undrift
+Paste the skills line off a résumé, or a whole job description, and Undrift
 checks each claim against what the commit history actually shows.
 
 <img src="docs/img/audit.png" alt="The résumé auditor, showing evidence verdicts per claimed skill" width="820">
@@ -79,7 +79,7 @@ checks each claim against what the commit history actually shows.
 The verdict that matters most is the boring grey one at the bottom. **"No
 evidence of AWS" and "Undrift does not track AWS" are completely different
 claims, and only the first is about you.** Conflating them would tell someone
-with three years of AWS that their AWS is unverified — confidently wrong about
+with three years of AWS that their AWS is unverified: confidently wrong about
 the one thing they came to check. Untracked skills get their own verdict, are
 rendered without a traffic-light colour, and are excluded from the match
 percentage entirely: a blind spot in the tool is not a finding about the person.
@@ -89,7 +89,7 @@ Everything after the mapping is arithmetic. Claude turns "React.js" into
 comes from depth, staleness from the same decay curve as the dashboard, so an
 audit is reproducible and can't be talked out of its answer.
 
-Audits are linkable — [`/?audit=Python,React,AWS`](https://undrift-supreeth-chittaluri.vercel.app/?audit=Python,React,AWS)
+Audits are linkable: [`/?audit=Python,React,AWS`](https://undrift-supreeth-chittaluri.vercel.app/?audit=Python,React,AWS)
 runs on load.
 
 ### Pasted text is untrusted
@@ -97,8 +97,8 @@ runs on load.
 A job description is a document written by somebody else, and it goes into a
 prompt. Undrift treats it as data:
 
-- The pasted text is used for exactly **one** operation — mapping phrases onto a
-  fixed enum — and the response schema makes any other output unrepresentable.
+- The pasted text is used for exactly **one** operation, mapping phrases onto a
+  fixed enum, and the response schema makes any other output unrepresentable.
 - The system prompt states plainly that the text is untrusted data that may
   contain instructions, and that they are never to be followed.
 - Nothing downstream re-reads it. The verdicts are computed from database rows.
@@ -111,13 +111,13 @@ injection was ignored and only the two genuine skills came back.
 
 ## The decay formula
 
-This is the part worth understanding, and it is deliberately plain Python — **no
+This is the part worth understanding, and it is deliberately plain Python: **no
 LLM decides whether a skill is stale.** On the live site the half-life is a
 slider, and the whole worked example re-scores as you drag it.
 
 <img src="docs/img/formula.png" alt="The interactive decay explainer" width="820">
 
-**Step 1 — every commit decays exponentially with age.**
+**Step 1: every commit decays exponentially with age.**
 
 ```
 weight(commit) = 0.5 ** (age_in_days / HALF_LIFE)
@@ -140,7 +140,7 @@ doesn't tank the score.
 | 180 days | 0.125 |
 | 1 year | 0.015 |
 
-**Step 2 — a skill's raw weight is the sum of its commits' weights.**
+**Step 2: a skill's raw weight is the sum of its commits' weights.**
 
 ```
 raw_weight(skill) = Σ weight(commit) for every commit tagged with that skill
@@ -151,7 +151,7 @@ scores lower than ten commits last week, because ten near-1.0 weights add up.
 Both factors fall out of a single sum rather than needing two terms bolted
 together.
 
-**Step 3 — squash it onto a 0–100 scale.**
+**Step 3: squash it onto a 0–100 scale.**
 
 ```
 freshness(skill) = 100 * raw_weight / (raw_weight + 3.0)
@@ -160,11 +160,11 @@ freshness(skill) = 100 * raw_weight / (raw_weight + 3.0)
 `raw_weight` is unbounded but a progress bar needs 0–100. This curve rises
 steeply at first and flattens as it approaches 100, so the gap between "never"
 and "occasionally" shows up strongly while the gap between "a lot" and "a whole
-lot" barely moves the bar — which is what you actually want, since past a point
+lot" barely moves the bar. That is what you actually want, since past a point
 more commits don't make you sharper.
 
 The constant `3.0` is what gives the score its meaning: **a skill whose decayed
-weight equals 3.0 — roughly three commits in the last few days — sits at exactly
+weight equals 3.0, roughly three commits in the last few days, sits at exactly
 50/100.**
 
 The scale is **absolute, not a ranking**. Scores aren't normalised against the
@@ -182,7 +182,7 @@ doctests covering every curve.
 
 ## How it works
 
-**1. Pull the commits.** GitHub's API, on a schedule. Only metadata — commit
+**1. Pull the commits.** GitHub's API, on a schedule. Only metadata: commit
 messages and the paths of changed files. Never source code.
 
 **2. Claude labels each one.** One skill per commit, chosen from a fixed
@@ -202,7 +202,7 @@ skills and every decay curve would be nonsense. The vocabulary is baked into the
 JSON schema as an enum, so the API itself enforces it.
 
 **The LLM only decides *which* skill a commit belongs to.** It is never asked
-whether a skill feels stale — that's arithmetic, and it lives in `scoring.py`.
+whether a skill feels stale; that's arithmetic, and it lives in `scoring.py`.
 Keeping the judgement call and the maths apart is what makes the numbers
 reproducible.
 
@@ -220,7 +220,7 @@ Measured on the 302-commit sample corpus:
 | Before | `claude-opus-5`, one commit per call | 302 | ~$1.70 |
 | After | `claude-haiku-4-5`, 25 per call | 13 | **~$0.09** |
 
-Haiku reproduced Opus's labels exactly on the corpus — picking one label from a
+Haiku reproduced Opus's labels exactly on the corpus; picking one label from a
 fixed enum given a filename list is the easy end of what an LLM does. Every
 failure mode degrades rather than breaking: a failed call falls the whole batch
 back to a deterministic extension-based tagger, and a merely incomplete response
@@ -236,10 +236,10 @@ just by route:
 
 | | Who | What |
 |---|---|---|
-| **Public** | anyone | `GET` on the read endpoints, restricted to sample profiles — public GitHub accounts seeded as demo data |
-| **Private** | owner only | my own profile, `POST /api/refresh`, and `/docs` — HTTP Basic |
+| **Public** | anyone | `GET` on the read endpoints, restricted to sample profiles: public GitHub accounts seeded as demo data |
+| **Private** | owner only | my own profile, `POST /api/refresh`, and `/docs` via HTTP Basic |
 
-The middleware decides one thing — *were valid credentials presented* — and
+The middleware decides one thing, *were valid credentials presented*, and
 records it on the request. Which profiles a caller may see is enforced in the
 handlers, where there's a database session to answer it with. A route added
 tomorrow is private until it explicitly opts in, which is the right direction
@@ -258,7 +258,7 @@ The image below is generated by the API on request, not committed:
 ![Live skill card](https://undrift-api.onrender.com/api/card.svg?profile=simonw)
 
 It renders server-side from the latest scores, so this README shows whatever the
-last sync computed. (Give Render's free tier a moment to wake up.)
+last sync computed. (Give the API a moment to wake up if it has been idle.)
 
 ---
 
@@ -269,7 +269,7 @@ last sync computed. (Give Render's free tier a moment to wake up.)
 ```bash
 git clone https://github.com/supreeth-chittaluri/undrift.git
 cd undrift
-cp .env.example .env     # then fill it in — see below
+cp .env.example .env     # then fill it in, see below
 ```
 
 Set up the backend:
@@ -284,7 +284,7 @@ Fill in `.env`. The four that matter:
 | Variable | What to put there |
 |---|---|
 | `ANTHROPIC_API_KEY` | From [console.anthropic.com](https://console.anthropic.com) |
-| `GITHUB_TOKEN` | A **fine-grained** token — see the security note below |
+| `GITHUB_TOKEN` | A **fine-grained** token; see the security note below |
 | `APP_USERNAME` / `APP_PASSWORD` | Anything; guards your own profile |
 | `SAMPLE_PROFILES` | Optional. Public GitHub usernames to seed as demo profiles |
 
@@ -321,7 +321,7 @@ profile when not.
 
 | Route | Auth | Returns |
 |---|---|---|
-| `GET /health` | — | Liveness, so Render can probe it |
+| `GET /health` | none | Liveness, so Render can probe it |
 | `GET /api/profiles` | public | Everyone visible to you, with commit counts |
 | `GET /api/skills?profile=` | public\* | Freshness, depth, momentum and forecast per skill |
 | `GET /api/skills/history?weeks=26` | public\* | Freshness over time, for the trend chart |
@@ -345,53 +345,53 @@ Two mechanisms, because one isn't enough:
 - **A GitHub Actions cron** ([`.github/workflows/refresh.yml`](.github/workflows/refresh.yml))
   POSTs to `/api/refresh` at 06:00 and 18:00 UTC.
 
-Render's free tier sleeps after ~15 minutes idle, and a sleeping process can't
-fire its own timer — so in production `ENABLE_SCHEDULER=false` and the cron is
-what actually drives ingestion. The pipeline is idempotent, so an extra run costs
-almost nothing: ingestion skips SHAs it already has and tagging skips commits it
-already tagged.
+Render's free instance sleeps after about 15 minutes idle, and a sleeping
+process can't fire its own timer, so in production `ENABLE_SCHEDULER=false` and
+the cron is what actually drives ingestion. The pipeline is idempotent, so an
+extra run costs almost nothing: ingestion skips SHAs it already has and tagging
+skips commits it already tagged.
 
 ---
 
 ## Deploying it
 
-Three free accounts, roughly 20 minutes. Do them in this order — each step
-produces a value the next one needs.
+Three accounts (each has a free tier), roughly 20 minutes. Do them in this
+order; each step produces a value the next one needs.
 
-### 1. Database — Neon
+### 1. Database: Neon
 
 Create a project at [neon.tech](https://neon.tech) and copy the connection
 string. `postgres://` and `postgresql://` both work; the app rewrites either to
 `postgresql+psycopg://` itself, so paste it unchanged. That rewrite is not
-cosmetic — SQLAlchemy resolves a bare `postgresql://` to psycopg2, which this
+cosmetic: SQLAlchemy resolves a bare `postgresql://` to psycopg2, which this
 project doesn't install, so without it the app dies at startup.
 
 Use the **pooled** endpoint (the one with `-pooler` in the host). Neon runs
 PgBouncer in transaction mode, which historically broke Python drivers that use
-protocol-level prepared statements — but Neon's PgBouncer is 1.22+ and psycopg
+protocol-level prepared statements, but Neon's PgBouncer is 1.22+ and psycopg
 3.2+ handles it, so no `prepare_threshold` workaround is needed. If you ever see
 `prepared statement "..." already exists`, that assumption has broken; the fix is
 `connect_args={"prepare_threshold": None}` in `db.py`.
 
-### 2. Backend — Render
+### 2. Backend: Render
 
 1. **New → Web Service**, connect this repo. Render reads `render.yaml`.
 2. Fill in the secrets it prompts for: `DATABASE_URL`, `GITHUB_TOKEN`,
    `ANTHROPIC_API_KEY`, `APP_USERNAME`, `APP_PASSWORD`, `SAMPLE_PROFILES`.
-   Leave `ALLOWED_ORIGINS` blank for now — you get that value in step 3.
+   Leave `ALLOWED_ORIGINS` blank for now; you get that value in step 3.
 3. Wait for the first deploy, then confirm it's alive:
    `curl https://<your-service>.onrender.com/health`
 
-The first refresh classifies every ingested commit — around 20 seconds and under
-a dime for three sample profiles.
+The first refresh classifies every ingested commit: around 20 seconds and
+roughly $0.09 for three sample profiles.
 
-### 3. Frontend — Vercel
+### 3. Frontend: Vercel
 
 1. **Add New → Project**, import this repo, set **Root Directory** to `frontend`.
 2. Add environment variable `VITE_API_URL` = your Render URL (no trailing slash).
 3. Under **Settings → Deployment Protection**, set Vercel Authentication to
    **Disabled**. It is on by default, and it gates *every* generated URL behind
-   your own Vercel login — which would make the public demo unreachable to
+   your own Vercel login, which would make the public demo unreachable to
    everyone but you.
 4. Deploy.
 
@@ -399,7 +399,7 @@ a dime for three sample profiles.
 
 - Back on Render, set `ALLOWED_ORIGINS` to your exact Vercel URL and redeploy.
   Without this the browser blocks every API call as a CORS violation. Use the
-  stable production alias, not a `undrift-<hash>.vercel.app` deployment URL —
+  stable production alias, not a `undrift-<hash>.vercel.app` deployment URL;
   every deploy creates a new immutable one that CORS would reject.
 - In this repo: **Settings → Secrets and variables → Actions**, add
   `UNDRIFT_API_URL`, `UNDRIFT_USERNAME`, `UNDRIFT_PASSWORD` so the cron can
@@ -413,26 +413,26 @@ a dime for three sample profiles.
 **Use a fine-grained GitHub token.** Undrift only ever issues `GET` requests
 against the commits API. Give it a fine-grained token with **Contents: Read-only**
 and **Metadata: Read-only** and nothing else. A classic token with full `repo`
-scope — let alone `admin:org` or `delete_repo` — hands far more authority to an
+scope, let alone `admin:org` or `delete_repo`, hands far more authority to an
 environment variable than this app has any use for.
 
 **Untrusted text reaches the model in two places**, and both are constrained the
 same way. Commit messages are classified into a fixed enum, so the worst a
 hostile message can do is influence its own label. Pasted résumés and job
 descriptions go through the auditor, which is covered above. In both cases the
-response schema — not the prompt — is what makes a successful injection
+response schema, not the prompt, is what makes a successful injection
 unrepresentable.
 
 **The audit endpoint spends money and is public.** It is rate limited per caller
 in-process (6 calls per 5 minutes), which is honestly a small defence: it resets
 on deploy and would not hold across replicas. It is adequate because the
-deployment is a single free-tier instance, and because the real ceiling is
+deployment is a single instance, and because the real ceiling is
 `MAX_COMMITS_PER_TAG_RUN`, which no request can bypass.
 
 **Credentials in the browser.** HTTP Basic means the dashboard has to hold the
 username and password to replay them on each request; they're kept in
 `sessionStorage`, so they're dropped when the tab closes. Anything the browser
-can replay is readable by scripts on the page — an acceptable tradeoff for a
+can replay is readable by scripts on the page: an acceptable tradeoff for a
 single-user private profile, but not the design a multi-user product should use.
 That would want real tokens and a session cookie.
 
@@ -440,15 +440,15 @@ That would want real tokens and a session cookie.
 deliberately: the database is a cache, not the source of truth. Everything in it
 can be rebuilt from GitHub. `init_db()` does add nullable columns that models
 have grown since a table was created, because losing a production database to a
-one-column change is a silly way to spend money re-classifying commits — but
+one-column change is a silly way to spend money re-classifying commits, but
 that's a patch, not a migration system, and anything beyond an additive column
 is still answered by dropping the database. A production multi-tenant app would
 want Alembic; for this, the simpler answer is the honest one.
 
-**A first sync costs real money, but not much.** ~$0.09 for three prolific
-profiles — see the table above. Later runs are nearly free, since only genuinely
-new commits get classified. `MAX_REPOS`, `MAX_COMMITS_PER_REPO` and
-`MAX_COMMITS_PER_TAG_RUN` are the levers if you want to spend less still; the
+**A first sync costs real money, but not much.** Roughly $0.09 for three
+prolific profiles (see the table above). Later runs cost almost nothing, since
+only genuinely new commits get classified. `MAX_REPOS`, `MAX_COMMITS_PER_REPO`
+and `MAX_COMMITS_PER_TAG_RUN` are the levers if you want to spend less still; the
 last is a hard per-run ceiling that no misconfiguration can exceed.
 
 **Nothing secret is committed.** `.env` is gitignored, `.env.example` ships with
@@ -477,5 +477,5 @@ frontend/src/
   App.jsx           landing page, dashboard, and which one you get
   api.js            every backend call, in one place
   skills.js         band thresholds, shared by the cards and the tiles
-  components/       Landing, SkillCard, Sparkline, Audit, DecayExplainer, …
+  components/       Landing, SkillCard, Sparkline, Audit, DecayExplainer, ...
 ```
