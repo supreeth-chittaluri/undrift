@@ -267,7 +267,7 @@ last sync computed. (Give the API a moment to wake up if it has been idle.)
 **Prerequisites:** Python 3.12+, Node 20+.
 
 ```bash
-git clone https://github.com/supreeth-chittaluri/undrift.git
+git clone https://github.com/supreethch/undrift.git
 cd undrift
 cp .env.example .env     # then fill it in, see below
 ```
